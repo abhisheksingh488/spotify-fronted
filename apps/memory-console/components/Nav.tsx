@@ -3,27 +3,24 @@
 // Why this file exists
 // ====================
 //
-// The sidebar. One entry per operator screen from the specification's
-// frontend section (abc.md:339-345), with the current one highlighted.
+// The sidebar. One entry per screen the requirement names, and nothing else.
 //
-// A screen marked `off` is not clickable yet. Quality review is off for good:
-// it needs golden-set runs, and the backend has no golden sets. The others are
-// off only until they are built. Showing them greyed out is more honest than
-// hiding them or linking to a page that is not there.
+// abc.md:339-345 lists seven screens for this console. All seven are here, in
+// the order the document lists them, so the sidebar can be read against the
+// requirement line by line.
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// The screens, in the order an operator meets them.
+// The seven screens of abc.md:339-345, in the document's own order.
 const SCREENS = [
-  { href: "/", label: "Overview", note: "health, lag, fallbacks" },
-  { href: "/flow", label: "Full flow", note: "all ten endpoints, in order" },
-  { href: "/memories", label: "Memory explorer", note: "what we hold, per subject", off: true },
+  { href: "/", label: "Overview", note: "health, ingestion lag, rejections" },
+  { href: "/memories", label: "Memory explorer", note: "one subject's memories" },
   { href: "/context", label: "Context preview", note: "retrieval, ranking, the pack" },
-  { href: "/corrections", label: "Correction & deletion", note: "fix or remove", off: true },
-  { href: "/policy", label: "Schema & policy", note: "retention, eligibility", off: true },
-  { href: "/trace", label: "Audit trace", note: "who decided what", off: true },
-  { href: "/quality", label: "Quality review", note: "needs golden sets", off: true },
+  { href: "/corrections", label: "Correction & deletion", note: "correct, remove, propagation" },
+  { href: "/policy", label: "Schema & policy", note: "allowed fields, retention" },
+  { href: "/quality", label: "Quality review", note: "golden-set runs" },
+  { href: "/trace", label: "Audit trace", note: "decisions behind a response" },
 ];
 
 export default function Nav() {
@@ -36,31 +33,20 @@ export default function Nav() {
         <div className="text-[11px] text-faint">operator views</div>
       </div>
 
-      {SCREENS.map((screen) =>
-        screen.off ? (
-          <div
-            key={screen.href}
-            className="cursor-not-allowed rounded-lg px-2 py-2 opacity-40"
-            title="Not built yet"
-          >
-            <div className="text-sm text-muted">{screen.label}</div>
-            <div className="text-[11px] text-faint">{screen.note}</div>
-          </div>
-        ) : (
-          <Link
-            key={screen.href}
-            href={screen.href}
-            className={`rounded-lg px-2 py-2 transition ${
-              path === screen.href
-                ? "bg-raised text-ink"
-                : "text-muted hover:bg-raised/60 hover:text-ink"
-            }`}
-          >
-            <div className="text-sm font-medium">{screen.label}</div>
-            <div className="text-[11px] text-faint">{screen.note}</div>
-          </Link>
-        ),
-      )}
+      {SCREENS.map((screen) => (
+        <Link
+          key={screen.href}
+          href={screen.href}
+          className={`rounded-lg px-2 py-2 transition ${
+            path === screen.href
+              ? "bg-raised text-ink"
+              : "text-muted hover:bg-raised/60 hover:text-ink"
+          }`}
+        >
+          <div className="text-sm font-medium">{screen.label}</div>
+          <div className="text-[11px] text-faint">{screen.note}</div>
+        </Link>
+      ))}
     </nav>
   );
 }

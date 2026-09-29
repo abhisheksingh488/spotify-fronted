@@ -1,7 +1,7 @@
 # Spotify Personalized AI — frontend
 
-The operator consoles for the governed memory system. The backend lives in its
-own repository, because the two deploy separately:
+The two web apps for the governed memory system. The backend lives in its own
+repository, because the two deploy separately:
 
 **Backend:** https://github.com/omsemwal/spotify-personalized-ai
 
@@ -9,99 +9,121 @@ own repository, because the two deploy separately:
 
 ## What is in here
 
+`abc.md:252-253` names two apps. Both are here.
+
 ```
 apps/
-  memory-console/     Next.js 16, TypeScript, Tailwind — the operator screens
+  memory-console/     Next.js — the seven internal operator screens
+  memory-controls/    Next.js — the listener-facing review, correction and deletion UI
 ```
 
-`abc.md:200` names the stack: *Next.js, React, Tailwind CSS*.
+Stack is `abc.md:200`: *Next.js, React, Tailwind CSS*.
 
 ---
 
-## The screens
+## The seven console screens
 
-From `abc.md:339-345`. One entry per screen the specification asks for.
+Exactly the seven of `abc.md:339-345`, in the document's own order. Nothing else.
 
-| Screen | What it is for | State |
+| # | Screen | State |
 |---|---|---|
-| **Full flow** | **All ten endpoints end to end, in the order they depend on each other** | **built** |
-| Overview | Service health, ingestion lag, fallback rate, deletion backlog | health only |
-| Memory explorer | One subject's memories: timeline, relationships, source, confidence | not built |
-| **Context preview** | **Intent and surface in; retrieval, ranking, policy removals, the pack and its token cost out** | **built** |
-| Correction and deletion | Correct or remove a memory, with propagation status | not built |
-| Schema and policy | Read-only: allowed fields, retention, sensitivity, eligibility | not built |
-| Audit trace | Decisions, memory identifiers, outcomes — no memory text | not built |
-| Quality review | Golden-set runs, failure clusters, multilingual cases | blocked — the backend has no golden sets yet |
+| 1 | **Overview** — service health, ingestion lag, rejection rate | built · 3 of 7 metrics have a data source |
+| 2 | **Subject-scoped memory explorer** — source type, confidence, relationships, status | built · timeline needs fields the search endpoint does not return |
+| 3 | **Context preview** — retrieval, ranking, policy removals, the pack, token usage | built · complete |
+| 4 | **Correction and deletion** — correct, expire, remove, propagation status | built · complete |
+| 5 | **Schema and policy view** — allowed fields, contract version, read-only | built · retention and sensitivity have no endpoint |
+| 6 | **Quality review** — golden-set runs, failure clusters, comparisons | built · blocked, `data/golden-sets/` does not exist |
+| 7 | **Audit trace** — decisions, identifiers, timestamps, redacted outcomes | built · complete |
+
+Each screen states on itself which of its required parts have no data source, and
+why. No number is invented.
+
+## The controls app
+
+`abc.md:51` asks for five listener paths: review, correct, remove, pause, opt out.
+
+| Path | State |
+|---|---|
+| Review | built |
+| Correct | built |
+| Remove, with propagation status | built |
+| Pause | not connected — no endpoint changes consent state |
+| Opt out | not connected — same reason |
+
+The two unconnected controls are shown disabled with the reason, rather than as
+switches that would appear to work.
 
 ---
 
 ## Running it
 
-The backend has to be up first — the consoles are a window onto it, and hold no
-data of their own.
-
-**1. Start the backend** (in the backend repository, two terminals):
+Four terminals. The first two are in the backend repository.
 
 ```bash
+# 1 - the API
 python -m uvicorn memory.api:app --reload --port 8000
+
+# 2 - the worker, which turns events into memories
 python scripts/run_processor.py --forever
+
+# 3 - the operator console            http://localhost:3000
+cd apps/memory-console && npm install && npm run dev
+
+# 4 - the listener controls           http://localhost:3001
+cd apps/memory-controls && npm install && npm run dev
 ```
 
 The worker is the one people forget. Without it, events are accepted and no
 memory ever appears, which looks exactly like a bug.
 
-**2. Start the console:**
+**One-time setup per app.** Each needs the backend's signing secret, because each
+signs its own requests — there is no login and nothing to paste:
 
 ```bash
-cd apps/memory-console
-npm install
-cp .env.local.example .env.local     # then paste the backend's MEMORY_JWT_SECRET
-npm run dev
+cp apps/memory-console/.env.local.example  apps/memory-console/.env.local
+cp apps/memory-controls/.env.local.example apps/memory-controls/.env.local
+# then put the backend's MEMORY_JWT_SECRET in both
 ```
 
-The console needs that secret because it signs its own requests, which is what
-removes the token handling. It stays on the server and never reaches a browser.
+Neither variable is prefixed `NEXT_PUBLIC_`, so neither reaches a browser. See
+[how-authentication-works.doc.md](docs/how-authentication-works.doc.md).
 
-Open **http://localhost:3000**.
-
-**3. Pick a subject** from the dropdown at the top. There is no login and
-nothing to paste - the console signs its own requests, which is the API
-gateway's job in the specification. See
-[how-authentication-works.doc.md](docs/how-authentication-works.doc.md) for why.
-
-**4. Open the Full flow screen** and press the ten buttons in order. That is the
-whole system in one page: an event in, a memory out, found, ranked, packed into a
-prompt, corrected, fed back on, deleted across every store, and the trace that
-explains it. Each step shows the request it sent and the response it got, and
-hands its identifiers to the next.
+In the console, pick which test subject to view as from the dropdown at the top.
+The controls app is fixed to one listener, which is the point of it.
 
 ---
 
-## Pointing at a different backend
+## Documents
 
-```bash
-cp apps/memory-console/.env.local.example apps/memory-console/.env.local
-# then edit
-NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
-```
+One per screen: what it shows, which requirement line it comes from, the call
+flow through to the store, and the functions behind it.
 
-The backend allows this origin explicitly (its `memory/api.py` CORS list), so a
-new origin has to be added there too.
+| | |
+|---|---|
+| [overview.doc.md](docs/overview.doc.md) | Screen 1 |
+| [memory-explorer.doc.md](docs/memory-explorer.doc.md) | Screen 2 |
+| [context-preview.doc.md](docs/context-preview.doc.md) | Screen 3 |
+| [correction-and-deletion.doc.md](docs/correction-and-deletion.doc.md) | Screen 4 |
+| [schema-and-policy.doc.md](docs/schema-and-policy.doc.md) | Screen 5 |
+| [quality-review.doc.md](docs/quality-review.doc.md) | Screen 6 |
+| [audit-trace.doc.md](docs/audit-trace.doc.md) | Screen 7 |
+| [memory-controls.doc.md](docs/memory-controls.doc.md) | The listener app |
+| [how-authentication-works.doc.md](docs/how-authentication-works.doc.md) | Why there is nothing to paste |
 
 ---
 
 ## How the code is laid out
 
+Both apps share the same shape.
+
 | | |
 |---|---|
-| `app/layout.tsx` | The frame: sidebar, subject picker, screen |
-| `app/page.tsx` | Overview |
-| `app/flow/page.tsx` | Full flow — all ten endpoints |
-| `app/context/page.tsx` | Context preview |
-| `components/Nav.tsx` | The sidebar, one entry per screen |
-| `components/SubjectBar.tsx` | Which subject to view as, and its consent state |
+| `app/layout.tsx` | The frame |
+| `app/<screen>/page.tsx` | One screen |
 | `app/api/backend/[...path]/route.ts` | The gateway: mints the token, forwards the request |
+| `components/Nav.tsx` | The sidebar — one entry per required screen (console only) |
+| `components/SubjectBar.tsx` | Which test subject to view as (console only) |
 | `components/ui.tsx` | Card, Field, Button, Badge, ScoreBar, Stat, ErrorNote |
 | `lib/api.ts` | The only place that calls the backend |
-| `lib/types.ts` | The response shapes, mirroring the backend's models |
-| `docs/` | One document per screen: what it shows and how the calls flow |
+| `lib/types.ts` | Response shapes, mirroring the backend's Pydantic models |
+| `lib/subjects.ts` | The approved test identities (`abc.md:340`) |
