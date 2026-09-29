@@ -55,21 +55,19 @@ memory ever appears, which looks exactly like a bug.
 ```bash
 cd apps/memory-console
 npm install
+cp .env.local.example .env.local     # then paste the backend's MEMORY_JWT_SECRET
 npm run dev
 ```
 
+The console needs that secret because it signs its own requests, which is what
+removes the token handling. It stays on the server and never reaches a browser.
+
 Open **http://localhost:3000**.
 
-**3. Paste a token.** There is no login screen, and that is deliberate: the
-backend's callers are services, so it mints per-subject service tokens and has
-no user accounts. Make one in the backend repository:
-
-```bash
-python scripts/make_token.py user_001
-```
-
-Paste it into the bar across the top of the console. It lasts fifteen minutes,
-and the bar counts down so an expiry never looks like a bug.
+**3. Pick a subject** from the dropdown at the top. There is no login and
+nothing to paste - the console signs its own requests, which is the API
+gateway's job in the specification. See
+[how-authentication-works.doc.md](docs/how-authentication-works.doc.md) for why.
 
 **4. Open the Full flow screen** and press the ten buttons in order. That is the
 whole system in one page: an event in, a memory out, found, ranked, packed into a
@@ -96,12 +94,13 @@ new origin has to be added there too.
 
 | | |
 |---|---|
-| `app/layout.tsx` | The frame: sidebar, token bar, screen |
+| `app/layout.tsx` | The frame: sidebar, subject picker, screen |
 | `app/page.tsx` | Overview |
 | `app/flow/page.tsx` | Full flow — all ten endpoints |
 | `app/context/page.tsx` | Context preview |
 | `components/Nav.tsx` | The sidebar, one entry per screen |
-| `components/TokenBar.tsx` | Where the operator's token goes, and when it dies |
+| `components/SubjectBar.tsx` | Which subject to view as, and its consent state |
+| `app/api/backend/[...path]/route.ts` | The gateway: mints the token, forwards the request |
 | `components/ui.tsx` | Card, Field, Button, Badge, ScoreBar, Stat, ErrorNote |
 | `lib/api.ts` | The only place that calls the backend |
 | `lib/types.ts` | The response shapes, mirroring the backend's models |

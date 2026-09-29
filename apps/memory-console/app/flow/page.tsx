@@ -20,6 +20,7 @@
 
 import { useState } from "react";
 import { ApiFailure, del, get, patch, post } from "@/lib/api";
+import { useSubject } from "@/lib/useSubject";
 import type {
   ContextPackage,
   DeletionAccepted,
@@ -67,7 +68,8 @@ type Flow = {
 };
 
 export default function FullFlowPage() {
-  const [subjectId, setSubjectId] = useState("user_001");
+  // Whichever subject the picker at the top is set to.
+  const subjectId = useSubject();
   const [surface, setSurface] = useState<Surface>("player");
   const [content, setContent] = useState("I really do not want any country music");
   const [intent, setIntent] = useState("put some music on");
@@ -296,12 +298,8 @@ export default function FullFlowPage() {
         right={done ? <Button variant="ghost" onClick={reset}>Reset</Button> : undefined}
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Subject" hint="Must match the subject in your token.">
-            <input
-              className={inputClass}
-              value={subjectId}
-              onChange={(event) => setSubjectId(event.target.value)}
-            />
+          <Field label="Subject" hint="Change this with the picker at the top.">
+            <div className={`${inputClass} text-faint`}>{subjectId}</div>
           </Field>
           <Field label="Surface">
             <select

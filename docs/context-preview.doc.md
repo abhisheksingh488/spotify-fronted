@@ -28,8 +28,9 @@ This screen starts when the operator presses **Compose context**.
    Clears the previous result, then makes the two calls below in order.
 
 2. **`post("/v1/memories/search", …)`** — `lib/api.ts`
-   Attaches the bearer token from `localStorage`, POSTs the JSON, and turns a
-   failure into an `ApiFailure` carrying the backend's stable code.
+   POSTs the JSON to `/api/backend/...` on the console's own server, which mints
+   the token and forwards it, and turns a failure into an `ApiFailure` carrying
+   the backend's stable code.
    → **Backend endpoint 4, `POST /v1/memories/search`**, which reads
    **Neo4j** (the memory graph and its 384-dimension vectors) and
    **PostgreSQL** (negative feedback, one of the six scoring signals).
@@ -42,7 +43,7 @@ This screen starts when the operator presses **Compose context**.
    weight beside its name.
 
 4. **`post("/v1/context/compose", …)`** — `lib/api.ts`
-   The same client, the same token.
+   The same client, through the same gateway route.
    → **Backend endpoint 5, `POST /v1/context/compose`**, which checks consent
    in **PostgreSQL**, runs retrieval against **Neo4j** again, applies the
    policy registry, trims to the token budget and renders the fenced block.
@@ -58,8 +59,8 @@ This screen starts when the operator presses **Compose context**.
    Shows the stable code, the message and the correlation id, because that id
    is what finds the request in the backend's audit log.
 
-Nothing is cached and nothing is stored in the browser except the token. Every
-press is a fresh pair of calls.
+Nothing is cached and nothing is stored in the browser - not even a token,
+which the browser never sees. Every press is a fresh pair of calls.
 
 ---
 
@@ -89,11 +90,8 @@ screen from a result into an explanation.
 
 | Function | Why it exists |
 |---|---|
-| `post()` | The only function that calls the backend: attaches the token, sends JSON, normalises errors. |
-| `getToken()` | Reads the operator's token out of `localStorage`. |
-| `setToken()` | Saves a pasted token, stripping `Authorization:` and `Bearer` so the whole printed line can be pasted. |
-| `tokenSubject()` | Reads the `sub` claim so the token bar can say who the token is for. |
-| `tokenExpiry()` | Reads the `exp` claim so the bar can count down the fifteen minutes. |
+| `post()` | Sends JSON to the gateway route and normalises errors. No token, no headers to remember. |
+| `useSubject()` (`lib/useSubject.ts`) | Which subject the console is acting as, read from the one cookie the picker writes. |
 | `ApiFailure` | An error that carries the backend's stable code and correlation id, not just a message. |
 | `toFailure()` | Unwraps the backend's `{"detail": {code, message, correlation_id}}` envelope. |
 

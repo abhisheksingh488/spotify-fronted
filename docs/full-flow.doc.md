@@ -42,8 +42,10 @@ step 10 GET    /v1/traces/{trace_id}             <- trace_id        -> decisions
 ```
 
 Each of those ten calls goes through **`post`, `get`, `patch` or `del` in
-`lib/api.ts`**, which attaches the bearer token, sends the JSON and turns a
-failure into an `ApiFailure` carrying the backend's stable code. The panel
+`lib/api.ts`**, which sends the JSON to `/api/backend/...` on the console's own
+server. That route mints a short-lived token and forwards the request, so no
+step here handles a credential. Failures come back as an `ApiFailure` carrying
+the backend's stable code. The panel
 **Identifiers being carried forward** shows what the flow is holding at any
 moment, so the chaining is visible rather than implied.
 

@@ -2,72 +2,23 @@
 // ====================
 //
 // One place that talks to the backend. Every screen calls `post`, `get`,
-// `patch` or `del` from here rather than using `fetch` itself, so the bearer
-// token, the error shape and the base URL are handled once instead of ten
-// times.
+// `patch` or `del` from here rather than using `fetch` itself, so the base
+// path and the error shape are handled once instead of ten times.
 //
-// There is no login screen on purpose. The backend mints service tokens
-// (backend `memory/auth.py`) - its callers are services, not people, so it
-// has no user accounts and no login endpoint. An operator pastes a token
-// made by `python scripts/make_token.py user_001`, and we keep it in the
-// browser for the fifteen minutes it lasts.
+// There is no token in this file, and that is the point. Calls go to
+// /api/backend/... on the console's own server, which mints the token and
+// forwards them (see app/api/backend/[...path]/route.ts). The browser never
+// holds a token or a secret, and nobody has to paste one.
+//
+// Which subject we are acting as is decided by the server from a cookie, not
+// sent from here - so a screen cannot ask for a subject it is not allowed to
+// see just by changing a request body.
 
 import type { ApiError } from "./types";
 
-// Where the backend is. Set NEXT_PUBLIC_API_BASE_URL to point somewhere else.
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
-
-// The localStorage key holding the operator's token.
-const TOKEN_KEY = "spotifymem.token";
-
-// Read the saved token, or an empty string when there is none.
-export function getToken(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return window.localStorage.getItem(TOKEN_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-// Save a token. Accepts a whole "Authorization: Bearer xxx" line and keeps
-// only the token, because that is what the script prints and what an
-// operator will paste.
-export function setToken(raw: string): string {
-  const token = raw.trim().replace(/^Authorization:\s*/i, "").replace(/^Bearer\s+/i, "");
-  try {
-    if (token) window.localStorage.setItem(TOKEN_KEY, token);
-    else window.localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    // A browser with storage blocked still works for this one page load.
-  }
-  return token;
-}
-
-// Read one claim out of a token without verifying it. We only display these -
-// the backend checks the signature and rejects a subject that does not match.
-function claim(token: string, name: string): unknown {
-  try {
-    const body = token.split(".")[1];
-    if (!body) return undefined;
-    const json = atob(body.replace(/-/g, "+").replace(/_/g, "/"));
-    return JSON.parse(json)[name];
-  } catch {
-    return undefined;
-  }
-}
-
-// Which subject this token is for, so a screen can prefill it.
-export function tokenSubject(token: string): string {
-  return (claim(token, "sub") as string) ?? "";
-}
-
-// When the token expires, as a Date, or null if it cannot be read.
-export function tokenExpiry(token: string): Date | null {
-  const exp = claim(token, "exp") as number | undefined;
-  return exp ? new Date(exp * 1000) : null;
-}
+// Every call goes through the console's own server, never straight to the
+// backend. That is what removes both the token handling and the need for CORS.
+export const API_BASE = "/api/backend";
 
 // An error carrying the backend's stable code, so a screen can say something
 // useful instead of "request failed".
@@ -93,7 +44,8 @@ async function toFailure(response: Response): Promise<ApiFailure> {
   };
   try {
     const parsed = await response.json();
-    // The backend wraps its envelope in `detail` (memory/errors.py).
+    // The backend wraps its envelope in `detail` (memory/errors.py), and the
+    // proxy keeps that shape for its own errors too.
     const detail = parsed?.detail ?? parsed;
     if (detail && typeof detail === "object" && "code" in detail) {
       body = detail as ApiError;
@@ -104,37 +56,26 @@ async function toFailure(response: Response): Promise<ApiFailure> {
   return new ApiFailure(response.status, body);
 }
 
-// The one function that actually calls the backend. Everything below is a
+// The one function that actually makes a request. Everything below is a
 // two-line wrapper over it.
 async function request<T>(
   method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
 ): Promise<T> {
-  const token = getToken();
-  if (!token) {
-    throw new ApiFailure(401, {
-      code: "NO_TOKEN",
-      message: "Paste a token first - python scripts/make_token.py user_001",
-      correlation_id: "",
-    });
-  }
-
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
       method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
-    // fetch only throws when the request never arrived.
+    // fetch only throws when the request never left the browser, which now
+    // means the console's own server is down, not the backend.
     throw new ApiFailure(0, {
-      code: "BACKEND_UNREACHABLE",
-      message: `Cannot reach ${API_BASE} - is the API running on that port?`,
+      code: "CONSOLE_UNREACHABLE",
+      message: "The console's own server did not answer. Is `npm run dev` still running?",
       correlation_id: "",
     });
   }
@@ -164,9 +105,8 @@ export function del<T>(path: string): Promise<T> {
   return request<T>("DELETE", path);
 }
 
-// GET a path that needs no token, used for /health.
+// Is the backend up? Goes through the proxy like everything else, so a failure
+// here means the same thing it means everywhere else.
 export async function getHealth(): Promise<unknown> {
-  const response = await fetch(`${API_BASE}/health`);
-  if (!response.ok) throw await toFailure(response);
-  return response.json();
+  return get<unknown>("/health");
 }

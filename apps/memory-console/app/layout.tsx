@@ -1,14 +1,15 @@
 // Why this file exists
 // ====================
 //
-// The frame every screen sits in: the sidebar on the left, the token bar
-// across the top, the screen underneath. Written once here so no screen has
-// to think about layout or about where its token comes from.
+// The frame every screen sits in: the sidebar on the left, the subject picker
+// across the top, the screen underneath. Written once here so no screen has to
+// think about layout, and none of them has to think about tokens at all - the
+// console's own server signs every request (app/api/backend/[...path]/route.ts).
 
 import type { Metadata } from "next";
 import "./globals.css";
 import Nav from "@/components/Nav";
-import TokenBar from "@/components/TokenBar";
+import SubjectBar from "@/components/SubjectBar";
 
 export const metadata: Metadata = {
   title: "Memory console",
@@ -26,7 +27,7 @@ export default function RootLayout({
       <body className="flex min-h-full antialiased">
         <Nav />
         <div className="flex min-w-0 flex-1 flex-col">
-          <TokenBar />
+          <SubjectBar />
           <main className="min-w-0 flex-1 p-6">{children}</main>
         </div>
       </body>

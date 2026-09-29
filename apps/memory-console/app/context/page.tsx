@@ -18,6 +18,7 @@
 
 import { useState } from "react";
 import { ApiFailure, post } from "@/lib/api";
+import { useSubject } from "@/lib/useSubject";
 import type { ContextPackage, SearchResult, Surface } from "@/lib/types";
 import {
   Badge,
@@ -43,7 +44,8 @@ const WEIGHTS: Record<string, number> = {
 };
 
 export default function ContextPreviewPage() {
-  const [subjectId, setSubjectId] = useState("user_001");
+  // Whichever subject the picker at the top is set to.
+  const subjectId = useSubject();
   const [intent, setIntent] = useState("put some music on");
   const [surface, setSurface] = useState<Surface>("player");
   const [budget, setBudget] = useState(500);
@@ -102,12 +104,8 @@ export default function ContextPreviewPage() {
         hint="Same fields an orchestrator sends to /v1/context/compose."
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Subject" hint="Must match the subject in your token.">
-            <input
-              className={inputClass}
-              value={subjectId}
-              onChange={(event) => setSubjectId(event.target.value)}
-            />
+          <Field label="Subject" hint="Change this with the picker at the top.">
+            <div className={`${inputClass} text-faint`}>{subjectId}</div>
           </Field>
 
           <Field label="Surface" hint="Policy allows different types per surface.">
