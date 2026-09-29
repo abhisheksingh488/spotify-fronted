@@ -16,6 +16,12 @@ import { Badge, Card } from "@/components/ui";
 // The screens from abc.md:339-345, with what each one is for.
 const SCREENS = [
   {
+    href: "/flow",
+    label: "Full flow",
+    line: "All ten endpoints end to end: an event in, a memory out, found, ranked, packed, corrected, deleted across every store, and the trace that explains it.",
+    ready: true,
+  },
+  {
     href: "/context",
     label: "Context preview",
     line: "Enter an intent and surface; see retrieval, ranking, policy removals, the final pack and its token cost.",

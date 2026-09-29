@@ -24,6 +24,7 @@ From `abc.md:339-345`. One entry per screen the specification asks for.
 
 | Screen | What it is for | State |
 |---|---|---|
+| **Full flow** | **All ten endpoints end to end, in the order they depend on each other** | **built** |
 | Overview | Service health, ingestion lag, fallback rate, deletion backlog | health only |
 | Memory explorer | One subject's memories: timeline, relationships, source, confidence | not built |
 | **Context preview** | **Intent and surface in; retrieval, ranking, policy removals, the pack and its token cost out** | **built** |
@@ -46,6 +47,9 @@ python -m uvicorn memory.api:app --reload --port 8000
 python scripts/run_processor.py --forever
 ```
 
+The worker is the one people forget. Without it, events are accepted and no
+memory ever appears, which looks exactly like a bug.
+
 **2. Start the console:**
 
 ```bash
@@ -66,6 +70,12 @@ python scripts/make_token.py user_001
 
 Paste it into the bar across the top of the console. It lasts fifteen minutes,
 and the bar counts down so an expiry never looks like a bug.
+
+**4. Open the Full flow screen** and press the ten buttons in order. That is the
+whole system in one page: an event in, a memory out, found, ranked, packed into a
+prompt, corrected, fed back on, deleted across every store, and the trace that
+explains it. Each step shows the request it sent and the response it got, and
+hands its identifiers to the next.
 
 ---
 
@@ -88,6 +98,7 @@ new origin has to be added there too.
 |---|---|
 | `app/layout.tsx` | The frame: sidebar, token bar, screen |
 | `app/page.tsx` | Overview |
+| `app/flow/page.tsx` | Full flow — all ten endpoints |
 | `app/context/page.tsx` | Context preview |
 | `components/Nav.tsx` | The sidebar, one entry per screen |
 | `components/TokenBar.tsx` | Where the operator's token goes, and when it dies |

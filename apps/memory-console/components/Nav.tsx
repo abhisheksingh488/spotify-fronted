@@ -17,6 +17,7 @@ import { usePathname } from "next/navigation";
 // The screens, in the order an operator meets them.
 const SCREENS = [
   { href: "/", label: "Overview", note: "health, lag, fallbacks" },
+  { href: "/flow", label: "Full flow", note: "all ten endpoints, in order" },
   { href: "/memories", label: "Memory explorer", note: "what we hold, per subject", off: true },
   { href: "/context", label: "Context preview", note: "retrieval, ranking, the pack" },
   { href: "/corrections", label: "Correction & deletion", note: "fix or remove", off: true },

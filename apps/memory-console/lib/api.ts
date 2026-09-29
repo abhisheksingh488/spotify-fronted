@@ -1,9 +1,10 @@
 // Why this file exists
 // ====================
 //
-// One place that talks to the backend. Every screen calls `post()` from here
-// rather than using `fetch` itself, so the bearer token, the error shape and
-// the base URL are handled once instead of ten times.
+// One place that talks to the backend. Every screen calls `post`, `get`,
+// `patch` or `del` from here rather than using `fetch` itself, so the bearer
+// token, the error shape and the base URL are handled once instead of ten
+// times.
 //
 // There is no login screen on purpose. The backend mints service tokens
 // (backend `memory/auth.py`) - its callers are services, not people, so it
@@ -44,31 +45,28 @@ export function setToken(raw: string): string {
   return token;
 }
 
-// Pull the subject out of a token so a screen can prefill it. A JWT's middle
-// part is base64url JSON; we only read it, we never trust it - the backend
-// verifies the signature and rejects a subject that does not match.
-export function tokenSubject(token: string): string {
+// Read one claim out of a token without verifying it. We only display these -
+// the backend checks the signature and rejects a subject that does not match.
+function claim(token: string, name: string): unknown {
   try {
     const body = token.split(".")[1];
-    if (!body) return "";
+    if (!body) return undefined;
     const json = atob(body.replace(/-/g, "+").replace(/_/g, "/"));
-    return (JSON.parse(json).sub as string) ?? "";
+    return JSON.parse(json)[name];
   } catch {
-    return "";
+    return undefined;
   }
+}
+
+// Which subject this token is for, so a screen can prefill it.
+export function tokenSubject(token: string): string {
+  return (claim(token, "sub") as string) ?? "";
 }
 
 // When the token expires, as a Date, or null if it cannot be read.
 export function tokenExpiry(token: string): Date | null {
-  try {
-    const body = token.split(".")[1];
-    if (!body) return null;
-    const json = atob(body.replace(/-/g, "+").replace(/_/g, "/"));
-    const exp = JSON.parse(json).exp as number | undefined;
-    return exp ? new Date(exp * 1000) : null;
-  } catch {
-    return null;
-  }
+  const exp = claim(token, "exp") as number | undefined;
+  return exp ? new Date(exp * 1000) : null;
 }
 
 // An error carrying the backend's stable code, so a screen can say something
@@ -106,8 +104,13 @@ async function toFailure(response: Response): Promise<ApiFailure> {
   return new ApiFailure(response.status, body);
 }
 
-// POST a JSON body to the backend and return the parsed response.
-export async function post<T>(path: string, body: unknown): Promise<T> {
+// The one function that actually calls the backend. Everything below is a
+// two-line wrapper over it.
+async function request<T>(
+  method: "GET" | "POST" | "PATCH" | "DELETE",
+  path: string,
+  body?: unknown,
+): Promise<T> {
   const token = getToken();
   if (!token) {
     throw new ApiFailure(401, {
@@ -120,12 +123,12 @@ export async function post<T>(path: string, body: unknown): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
-      method: "POST",
+      method,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(body),
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
     // fetch only throws when the request never arrived.
@@ -138,6 +141,27 @@ export async function post<T>(path: string, body: unknown): Promise<T> {
 
   if (!response.ok) throw await toFailure(response);
   return (await response.json()) as T;
+}
+
+// POST a JSON body - endpoints 1, 2, 3, 4, 5 and 9.
+export function post<T>(path: string, body: unknown): Promise<T> {
+  return request<T>("POST", path, body);
+}
+
+// GET - endpoints 8 and 10, and /metrics.
+export function get<T>(path: string): Promise<T> {
+  return request<T>("GET", path);
+}
+
+// PATCH - endpoint 6, correcting or expiring a memory.
+export function patch<T>(path: string, body: unknown): Promise<T> {
+  return request<T>("PATCH", path, body);
+}
+
+// DELETE - endpoint 7, starting a cross-store deletion. Named `del` because
+// `delete` is a reserved word.
+export function del<T>(path: string): Promise<T> {
+  return request<T>("DELETE", path);
 }
 
 // GET a path that needs no token, used for /health.
