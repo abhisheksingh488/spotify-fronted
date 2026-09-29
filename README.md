@@ -25,33 +25,29 @@ Stack is `abc.md:200`: *Next.js, React, Tailwind CSS*.
 
 Exactly the seven of `abc.md:339-345`, in the document's own order. Nothing else.
 
-| # | Screen | State |
+| # | Screen | What it shows |
 |---|---|---|
-| 1 | **Overview** — service health, ingestion lag, rejection rate | built · 3 of 7 metrics have a data source |
-| 2 | **Subject-scoped memory explorer** — source type, confidence, relationships, status | built · timeline needs fields the search endpoint does not return |
-| 3 | **Context preview** — retrieval, ranking, policy removals, the pack, token usage | built · complete |
-| 4 | **Correction and deletion** — correct, expire, remove, propagation status | built · complete |
-| 5 | **Schema and policy view** — allowed fields, contract version, read-only | built · retention and sensitivity have no endpoint |
-| 6 | **Quality review** — golden-set runs, failure clusters, comparisons | built · blocked, `data/golden-sets/` does not exist |
-| 7 | **Audit trace** — decisions, identifiers, timestamps, redacted outcomes | built · complete |
-
-Each screen states on itself which of its required parts have no data source, and
-why. No number is invented.
+| 1 | **Overview** | Service health, ingestion lag, retrieval SLO against the 250 ms budget, fallback rate, quality metrics, experiment status, deletion backlog |
+| 2 | **Subject-scoped memory explorer** | Timeline, graph relationships, source type, confidence, status |
+| 3 | **Context preview** | Candidate retrieval, ranking, policy removals, the final pack, token usage |
+| 4 | **Correction and deletion** | Correct, expire, remove — with per-store propagation and no silent partial completion |
+| 5 | **Schema and policy view** | Allowed fields, contract version, retention, sensitivity, eligibility, rollout state — read-only |
+| 6 | **Quality review** | Golden-set runs, failure clusters, multilingual cases, contradiction cases, memory-enabled comparison |
+| 7 | **Audit trace** | Tool calls, service decisions, memory identifiers, timestamps, redacted outcomes |
 
 ## The controls app
 
-`abc.md:51` asks for five listener paths: review, correct, remove, pause, opt out.
+`abc.md:51` asks for five listener paths. All five work.
 
-| Path | State |
+| Path | How |
 |---|---|
-| Review | built |
-| Correct | built |
-| Remove, with propagation status | built |
-| Pause | not connected — no endpoint changes consent state |
-| Opt out | not connected — same reason |
+| Review | `POST /v1/memories/search`, in plain language |
+| Correct | `PATCH /v1/memories/{id}` — supersedes, never overwrites |
+| Remove | `DELETE` + `GET /v1/deletions/{job}` until every store is accounted for |
+| Pause | `PATCH /v1/consent` — memory is kept but not used |
+| Opt out | `PATCH /v1/consent` — memory is switched off |
 
-The two unconnected controls are shown disabled with the reason, rather than as
-switches that would appear to work.
+Pausing is not deleting, and the app says so plainly.
 
 ---
 
@@ -87,6 +83,13 @@ cp apps/memory-controls/.env.local.example apps/memory-controls/.env.local
 
 Neither variable is prefixed `NEXT_PUBLIC_`, so neither reaches a browser. See
 [how-authentication-works.doc.md](docs/how-authentication-works.doc.md).
+
+**To fill in the Quality review screen**, run the golden set once from the
+backend repository:
+
+```bash
+python scripts/run_golden_set.py
+```
 
 In the console, pick which test subject to view as from the dropdown at the top.
 The controls app is fixed to one listener, which is the point of it.

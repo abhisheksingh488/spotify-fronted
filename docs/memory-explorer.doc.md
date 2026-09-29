@@ -6,27 +6,27 @@
 approved support or test identities; show timeline, graph relationships, source
 type, confidence, and status."*
 
+All five are on the screen.
+
 ---
 
 ## Call flow
 
-1. **`load(query)`** — `app/memories/page.tsx`
-   Runs on arrival, and again whenever the subject or the surface changes. An
-   empty search box becomes a broad intent, which is how the screen lists
-   everything rather than only what matches a phrase.
+1. **`load(query)`** — runs on arrival, and again whenever the subject or the
+   surface changes. An empty search box becomes a broad intent, which is how the
+   screen lists everything rather than only what matches a phrase.
 
 2. **`post("/v1/memories/search", …)`** — `lib/api.ts`
    → `/api/backend/v1/memories/search` on the console's own server, which mints
    the token for the selected subject and forwards it.
-   → **Backend `POST /v1/memories/search`** → **`retrieval.search()`** in
-   `memory/retrieval.py`:
+   → **Backend `POST /v1/memories/search`** → **`retrieval.search()`**:
    - **Neo4j** — `graph_candidates()` walks `:ABOUT` edges for relational matches
    - **Neo4j vector index** — `similar()` for semantic matches on `embedding_384`
    - **PostgreSQL** — `db.negative_feedback()`, one of the six scoring signals
    - the policy registry then drops types this surface may not use
 
-3. **`setResult()`** — renders four cards: the counts, what policy hides on this
-   surface, the memories themselves, and the one field that cannot be shown.
+3. **`setResult()`** — renders the counts, what policy hides on this surface, and
+   the memories themselves.
 
 Filtering by type happens in the browser on the results already returned; it is a
 view control, not another query.
@@ -37,36 +37,51 @@ view control, not another query.
 
 This is why there is no free-text subject box on this screen.
 
-The subject comes from the picker in the header, whose list is
-`lib/subjects.ts` — the five identities the backend's migration seeds. The
-console's gateway checks the cookie against that same list **before it signs a
-token**, so editing the cookie by hand cannot widen what the console can reach.
-Verified: a cookie naming `somebody_elses_account` comes back acting as
-`user_001`.
+The subject comes from the picker in the header, whose list is `lib/subjects.ts`
+— the five identities the backend's migration seeds. The console's gateway checks
+the cookie against that same list **before it signs a token**, so editing the
+cookie by hand cannot widen what the console can reach. Verified: a cookie naming
+`somebody_elses_account` comes back acting as `user_001`.
+
+---
+
+## The timeline
+
+`RankedMemory` now carries the three temporal properties the graph has always
+stored (`abc.md:117` — *"valid-from, valid-to, recorded-at, source-event
+identifiers, confidence, and policy class"*), plus the status:
+
+| Field | Shown as |
+|---|---|
+| `recorded_at` | **recorded** — when we wrote it down |
+| `valid_from` | **valid from** — when it started being true |
+| `valid_to` | **valid to**, or **still true** when null |
+| `status` | a pill: `active`, `superseded` or `expired` |
+
+The status colour carries the meaning: green while it is still true, amber once a
+correction replaced it, grey once it expired. A superseded memory is not deleted
+— `abc.md:118` requires corrections to supersede *"without erasing audit history
+prematurely"* — so seeing one with a `valid_to` is the correction mechanism
+working, not a fault.
+
+Those fields were previously dropped between the graph and the response, which is
+why this screen could list memories but not place them in time.
 
 ---
 
 ## What is shown, against the requirement
 
-Five things are asked for. Three are returned by the endpoint.
-
 | Asked for | Shown |
 |---|---|
-| Source type | Yes — the memory type, plus *stated* or *observed* |
-| Confidence | Yes — on every memory |
-| Graph relationships | Yes — the canonical entities each memory is `:ABOUT` |
-| Status | Partly — `active` only, because search returns nothing else |
-| Timeline | **No** — see below |
-
-**Timeline** is the real gap. The graph stores `recorded_at`, `valid_from` and
-`valid_to` on every memory, and `RankedMemory` returns none of them, so memories
-cannot be placed in time. Superseded and expired memories are not returned either,
-so the other statuses cannot be shown. Both facts are stated in a **Not
-available** card on the screen.
+| Timeline | `recorded_at`, `valid_from`, `valid_to` on every memory |
+| Graph relationships | The canonical entities each memory is `:ABOUT` |
+| Source type | The memory type, plus *stated* or *observed* |
+| Confidence | On every memory, with the evidence count beside it |
+| Status | `active`, `superseded` or `expired` |
 
 Two things are shown beyond the list, because they explain what the operator is
-looking at: how many candidates the graph held versus how many are retrievable
-here, and the per-type counts.
+looking at: how many candidates the graph held versus how many are retrievable on
+this surface, and the per-type counts.
 
 ---
 
@@ -77,10 +92,10 @@ here, and the per-type counts.
 | `MemoryExplorerPage()` | `app/memories/page.tsx` | The screen; holds the query, surface, type filter and results. |
 | `load()` | same | One search for the selected subject. Turns an empty box into a broad intent. |
 | `sourceClass()` | same | Stated or observed — the distinction that matters most when judging whether a memory should have been used. |
-| `TYPES` | same | The five memory types `abc.md:112` names, for the filter. |
+| `when()` | same | One timestamp as a short local date and time, or a dash when absent. |
+| `statusTone()` | same | Green while still true, amber once superseded, grey once expired. |
 | `useSubject()` | `lib/useSubject.ts` | The subject the console is acting as, so the request body matches the token. |
-| `post()` | `lib/api.ts` | A POST through the gateway. |
-| `typeTone()` | `components/ui.tsx` | Green for stated, amber for inferred, red for an exclusion. |
+| `as_datetime()` | `memory/retrieval.py` | Turns a Neo4j temporal value into a plain datetime, keeping a missing value as null rather than a misleading zero date. |
 
 ---
 
@@ -90,3 +105,8 @@ here, and the per-type counts.
 disappear, and the **Held, but not retrievable on this surface** card names each
 one and why. That is the policy registry being enforced, visible rather than
 described.
+
+**Correct a memory on the Correction screen, then come back here.** The
+correction appears as a new `active` memory, and the original is still listed
+with a `valid_to` and a `superseded` status — the history that `abc.md:118`
+requires be kept.

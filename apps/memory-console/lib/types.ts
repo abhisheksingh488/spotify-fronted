@@ -130,6 +130,17 @@ export type RankedMemory = {
   signals: Record<string, number>;
   entities: string[];
   evidence_count: number;
+
+  // When it was written, and the window it is true for. abc.md:117 stores all
+  // three on every memory; abc.md:340 needs them to place a memory in time.
+  recorded_at: string | null;
+  valid_from: string | null;
+
+  // null while the memory is still true. Set once it is superseded or expired.
+  valid_to: string | null;
+
+  // active | superseded | expired. abc.md:340 asks for status by name.
+  status: string;
 };
 
 export type SearchResult = {
@@ -244,8 +255,78 @@ export type TraceRecord = {
 
 // --- GET /metrics ---------------------------------------------------------
 
-// The operational numbers the Overview screen shows. Everything here is a
-// count derived from the audit table, so there is no separate counter to drift.
+// Retrieval latency against the 250 ms P95 budget of abc.md:170.
+export type RetrievalSlo = {
+  budget_ms: number;
+  window_minutes: number;
+  samples: number;
+  p50_ms: number | null;
+  p95_ms: number | null;
+  p99_ms: number | null;
+  within_budget: boolean | null;
+};
+
+// How often a request answered without memory, and why. abc.md:143.
+export type FallbackRate = {
+  window_minutes: number;
+  requests: number;
+  fell_back: number;
+  rate: number;
+  by_reason: Record<string, number>;
+};
+
+// Deletion jobs that have not finished clearing every store. abc.md:143.
+export type DeletionBacklog = {
+  unfinished: number;
+  completed: number;
+  by_status: Record<string, number>;
+  oldest_pending_seconds: number | null;
+};
+
+// The memory-enabled / memory-disabled split. abc.md:146.
+export type ExperimentStatus = {
+  experiment: string;
+  memory_enabled: number;
+  memory_disabled: number;
+  subjects: number;
+  has_baseline: boolean;
+};
+
+// One golden-set run and its three scores. abc.md:148, abc.md:361.
+export type GoldenRun = {
+  run_id: string;
+  started_at: string | null;
+  finished_at: string | null;
+  status: string;
+  total_cases: number;
+  passed: number;
+  failed: number;
+  precision_at_k: number | null;
+  contradiction_rate: number | null;
+  provenance_completeness: number | null;
+};
+
+// One case within a run. The category is what lets failures be clustered.
+export type GoldenCase = {
+  case_id: string;
+  category: string;
+  locale: string | null;
+  passed: boolean;
+  failure_reason: string | null;
+  expected_top: number;
+  matched_top: number;
+  prohibited_leaked: number;
+};
+
+// What GET /quality/runs returns.
+export type QualityRuns = {
+  runs: GoldenRun[];
+  cases: GoldenCase[];
+  experiment: ExperimentStatus;
+};
+
+// The operational numbers the Overview screen shows. abc.md:339 names seven;
+// all seven are here, with health being its own endpoint.
 export type Metrics = {
   events: {
     accepted: number;
@@ -256,4 +337,35 @@ export type Metrics = {
   rejection_rate: number;
   rejections_by_reason: Record<string, number>;
   ingestion_lag_seconds: number | null;
+  retrieval_slo: RetrievalSlo;
+  fallback: FallbackRate;
+  deletion_backlog: DeletionBacklog;
+  experiment: ExperimentStatus;
+  quality: GoldenRun | null;
+};
+
+// --- GET /policy ----------------------------------------------------------
+
+// How one memory type must be treated. abc.md:292.
+export type PolicyType = {
+  sensitivity: string;
+  retention_days: number;
+  retrieval_eligibility: string[];
+};
+
+// What GET /policy returns — the registry the policy engine enforces.
+export type PolicyRegistry = {
+  event_schema_version: string;
+  memory_types: Record<string, PolicyType>;
+  surfaces: string[];
+  rollout_state: string;
+};
+
+// --- GET and PATCH /v1/consent -------------------------------------------
+
+// A subject's consent state, with what it means in one line. abc.md:136.
+export type ConsentState = {
+  subject_id: string;
+  state: "granted" | "paused" | "denied";
+  meaning: string;
 };

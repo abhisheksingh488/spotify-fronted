@@ -11,11 +11,15 @@
 // abc.md:136 - "Provide review, correction, deletion, pause, and opt-out paths
 //               with clear state and propagation status."
 //
-// Five paths are asked for. Review, correct and remove work here against the
-// live service. Pause and opt-out change consent state, and no endpoint in
-// abc.md:303-322 changes consent - so those two say so plainly instead of
-// pretending to work. A control that looks like it turned memory off without
-// turning it off would be the worst failure this app could have.
+// All five work here against the live service. Pause and opt-out change consent
+// state through PATCH /v1/consent, and the service enforces that state before
+// memory ever reaches retrieval - so pausing takes effect on the very next
+// request rather than at some later sync.
+//
+// Pausing is not deleting, and the screen says so. abc.md:137 keeps them
+// separate: pausing stops memory being used, deleting removes it. Blurring the
+// two would be the easiest way to mislead someone about what just happened to
+// their data.
 //
 // The language is deliberately plain. No memory ids, no confidence scores, no
 // graph vocabulary - the transcript's Product Design Lead asks for "Spotify
@@ -24,6 +28,7 @@
 import { useEffect, useState } from "react";
 import { ApiFailure, del, get, patch, post } from "@/lib/api";
 import type {
+  ConsentState,
   DeletionAccepted,
   DeletionStatus,
   MemoryUpdated,
@@ -67,6 +72,38 @@ export default function MemoryControlsPage() {
 
   const [busy, setBusy] = useState(false);
 
+  // Whether memory is on, paused or off for this listener.
+  const [consent, setConsent] = useState<ConsentState | null>(null);
+
+  // Read the current consent state, so the buttons show where things stand
+  // rather than assuming.
+  async function loadConsent() {
+    try {
+      setConsent(await get<ConsentState>("/v1/consent"));
+    } catch (error) {
+      setFailure(error as ApiFailure);
+    }
+  }
+
+  // Pause, resume or switch memory off. abc.md:136 - the pause and opt-out
+  // paths. Nothing is deleted: abc.md:137 keeps pausing and deleting separate.
+  async function setConsentState(state: "granted" | "paused" | "denied") {
+    setBusy(true);
+    setFailure(null);
+    try {
+      const next = await patch<ConsentState>("/v1/consent", { state });
+      setConsent(next);
+      setNote(next.meaning);
+      // A paused or switched-off listener should see the list reflect that
+      // straight away rather than on the next visit.
+      await load();
+    } catch (error) {
+      setFailure(error as ApiFailure);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Everything we hold about this listener. The subject is fixed on the server,
   // so there is nothing to pass here and nothing they could change.
   async function load() {
@@ -91,6 +128,7 @@ export default function MemoryControlsPage() {
 
   useEffect(() => {
     load();
+    loadConsent();
   }, []);
 
   // Correct the wording. The old version is kept as history rather than
@@ -308,35 +346,71 @@ export default function MemoryControlsPage() {
         )}
       </Card>
 
-      {/* Pause and opt out - paths four and five. Nothing in the API changes
-          consent, so this says so rather than offering a switch that does
-          nothing. */}
+      {/* Pause and opt out - paths four and five. */}
       <Card
         title="Pause or turn off memory"
-        hint="abc.md:136 asks for these. They are not connected yet."
+        hint="Takes effect on your very next request. Nothing is deleted."
       >
         <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="warn">not available yet</Badge>
+          {consent && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                tone={
+                  consent.state === "granted"
+                    ? "good"
+                    : consent.state === "paused"
+                      ? "warn"
+                      : "bad"
+                }
+              >
+                {consent.state === "granted"
+                  ? "memory is on"
+                  : consent.state === "paused"
+                    ? "memory is paused"
+                    : "memory is off"}
+              </Badge>
+              <span className="text-xs text-muted">{consent.meaning}</span>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            {consent?.state !== "granted" && (
+              <Button onClick={() => setConsentState("granted")} disabled={busy}>
+                Turn memory back on
+              </Button>
+            )}
+            {consent?.state !== "paused" && (
+              <Button
+                variant="ghost"
+                onClick={() => setConsentState("paused")}
+                disabled={busy}
+              >
+                Pause memory
+              </Button>
+            )}
+            {consent?.state !== "denied" && (
+              <Button
+                variant="ghost"
+                onClick={() => setConsentState("denied")}
+                disabled={busy}
+              >
+                Turn memory off
+              </Button>
+            )}
           </div>
-          <p className="text-sm text-muted">
-            Pausing and turning off memory both change your consent state. The
-            memory service reads that state and already honours it — while paused,
-            it uses no memory at all and says so — but none of its ten endpoints
-            can change it, so there is nothing for these controls to call.
-          </p>
-          <p className="text-xs text-faint">
-            No switch is shown here on purpose. A control that looked like it
-            turned memory off without turning it off would be worse than no
-            control at all.
-          </p>
-          <div className="flex gap-2 opacity-40">
-            <Button variant="ghost" disabled>
-              Pause memory
-            </Button>
-            <Button variant="ghost" disabled>
-              Turn memory off
-            </Button>
+
+          {/* The distinction that matters most on this screen. */}
+          <div className="rounded-lg border border-edge bg-base px-3 py-2">
+            <p className="text-xs text-muted">
+              <span className="font-semibold text-ink">Pausing is not deleting.</span>{" "}
+              While paused, nothing you have told us is used — the assistant
+              carries on without it — but nothing is removed either, so turning
+              memory back on restores everything above.
+            </p>
+            <p className="mt-1.5 text-xs text-muted">
+              To remove something for good, use <strong>Remove</strong> on it. That
+              clears it from every store and tells you when each one is done.
+            </p>
           </div>
         </div>
       </Card>

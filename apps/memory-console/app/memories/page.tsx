@@ -51,6 +51,28 @@ function sourceClass(memoryType: string): "stated" | "observed" {
     : "observed";
 }
 
+// One timestamp as a short local date and time, or a dash when absent.
+function when(value: string | null | undefined): string {
+  if (!value) return "—";
+  const at = new Date(value);
+  return Number.isNaN(at.getTime())
+    ? "—"
+    : at.toLocaleString(undefined, {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+}
+
+// A memory's status decides its colour: green while it is still true, amber
+// once a correction replaced it, grey once it expired.
+function statusTone(status: string): "good" | "warn" | "neutral" {
+  if (status === "active") return "good";
+  if (status === "superseded") return "warn";
+  return "neutral";
+}
+
 export default function MemoryExplorerPage() {
   const subjectId = useSubject();
 
@@ -238,9 +260,10 @@ export default function MemoryExplorerPage() {
                       >
                         {sourceClass(memory.memory_type)}
                       </Badge>
-                      {/* Status - abc.md:340. Search only ever returns active
-                          memories, so that much is known and said. */}
-                      <Badge tone="good">active</Badge>
+                      {/* Status - abc.md:340. active while the memory is
+                          still true, superseded once a correction replaced
+                          it, expired once its retention ran out. */}
+                      <Badge tone={statusTone(memory.status)}>{memory.status}</Badge>
                       <span className="ml-auto font-mono text-[11px] text-faint">
                         {memory.memory_id}
                       </span>
@@ -253,6 +276,30 @@ export default function MemoryExplorerPage() {
                       <span>confidence {memory.confidence.toFixed(2)}</span>
                       <span>seen in {memory.evidence_count} event(s)</span>
                       <span>relevance {memory.score.toFixed(3)}</span>
+                    </div>
+
+                    {/* Timeline - abc.md:340. abc.md:117 stores valid-from,
+                        valid-to and recorded-at on every memory; these are
+                        those three, which is what places a memory in time. */}
+                    <div className="mt-2 flex flex-wrap items-center gap-3 border-t border-edge pt-2 text-[11px] text-faint">
+                      <span>
+                        recorded{" "}
+                        <span className="text-muted">{when(memory.recorded_at)}</span>
+                      </span>
+                      <span>
+                        valid from{" "}
+                        <span className="text-muted">{when(memory.valid_from)}</span>
+                      </span>
+                      <span>
+                        {memory.valid_to ? (
+                          <>
+                            valid to{" "}
+                            <span className="text-muted">{when(memory.valid_to)}</span>
+                          </>
+                        ) : (
+                          <span className="text-muted">still true</span>
+                        )}
+                      </span>
                     </div>
 
                     {/* Graph relationships - abc.md:340. These are the
@@ -278,21 +325,6 @@ export default function MemoryExplorerPage() {
         </>
       )}
 
-      {/* The one part of abc.md:340 this screen cannot show. */}
-      <Card title="Not available" hint="abc.md:340 asks for it; the endpoint does not return it.">
-        <div className="rounded-lg border border-edge bg-raised/40 px-3 py-2">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-muted">Timeline</span>
-            <Badge tone="warn">no data source</Badge>
-          </div>
-          <p className="mt-1 text-[11px] text-faint">
-            The graph holds recorded_at, valid_from and valid_to on every memory,
-            but POST /v1/memories/search returns none of them, so memories cannot
-            be placed in time. Superseded and expired memories are likewise not
-            returned, so only the active status can be shown.
-          </p>
-        </div>
-      </Card>
     </div>
   );
 }

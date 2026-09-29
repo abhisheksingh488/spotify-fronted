@@ -7,41 +7,19 @@
 // retrieval SLO, fallback rate, quality metrics, experiment status, and
 // deletion backlog."
 //
-// Seven things are asked for. The backend reports three of them through
-// GET /health and GET /metrics. The other four have no endpoint behind them, so
-// this screen names them and says so instead of inventing a number - a made-up
-// SLO on an operations console is worse than an empty one.
+// All seven are here. Health is its own endpoint; the other six come from
+// GET /metrics, which reads them from the audit trail and from the tables
+// migration 006 added.
+//
+// Nothing on this screen is estimated. Where a number has no samples yet it
+// says so, because an operations console that guesses is worse than one that
+// admits it has not measured anything.
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ApiFailure, get, getHealth } from "@/lib/api";
 import type { Metrics } from "@/lib/types";
 import { Badge, Card, ErrorNote, Stat } from "@/components/ui";
-
-// The four numbers abc.md:339 asks for that no endpoint reports, each with the
-// reason. Shown rather than hidden, because a missing metric is an operational
-// fact an operator needs to know about.
-const NOT_INSTRUMENTED = [
-  {
-    label: "Retrieval SLO",
-    why: "abc.md:170 sets a 250 ms P95 budget, but no endpoint reports per-request latency, so there is nothing to average.",
-  },
-  {
-    label: "Fallback rate",
-    why: "POST /v1/context/compose returns no_memory per request; nothing aggregates it across requests.",
-  },
-  {
-    label: "Quality metrics",
-    why: "abc.md:148 wants precision and contradiction rate from golden-set runs. data/golden-sets/ does not exist yet.",
-  },
-  {
-    label: "Experiment status",
-    why: "abc.md:146 asks for memory-enabled and memory-disabled cohorts. No cohort allocation is implemented.",
-  },
-  {
-    label: "Deletion backlog",
-    why: "Deletion jobs are stored in PostgreSQL, but the only read is GET /v1/deletions/{job_id} - one job at a time, with no queue view.",
-  },
-];
 
 export default function OverviewPage() {
   const [health, setHealth] = useState<"checking" | "up" | "down">("checking");
@@ -49,7 +27,7 @@ export default function OverviewPage() {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
 
   // Ask once on load, then every ten seconds, so an operator watching this
-  // screen sees ingestion lag move rather than a frozen number.
+  // screen sees the numbers move rather than a frozen snapshot.
   useEffect(() => {
     let live = true;
 
@@ -80,12 +58,17 @@ export default function OverviewPage() {
     };
   }, []);
 
-  // Ingestion lag in words. Seconds are precise and unreadable past a minute.
-  function lagText(seconds: number | null): string {
-    if (seconds === null) return "no events yet";
+  // Seconds into words. Seconds alone are unreadable past a minute.
+  function asDuration(seconds: number | null): string {
+    if (seconds === null) return "—";
     if (seconds < 60) return `${Math.round(seconds)}s`;
     if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
     return `${(seconds / 3600).toFixed(1)}h`;
+  }
+
+  // A rate as a percentage, or a dash when nothing has happened yet.
+  function asPercent(rate: number, samples: number): string {
+    return samples === 0 ? "—" : `${(rate * 100).toFixed(1)}%`;
   }
 
   return (
@@ -93,12 +76,12 @@ export default function OverviewPage() {
       <header>
         <h1 className="text-xl font-semibold">Overview</h1>
         <p className="mt-1 text-sm text-muted">
-          Service health, ingestion lag and policy rejections. Refreshes every
-          ten seconds.
+          The seven operational views of `abc.md:339`. Refreshes every ten
+          seconds.
         </p>
       </header>
 
-      {/* Service health - the first thing abc.md:339 asks for. */}
+      {/* 1 - Service health. */}
       <Card title="Service health" hint="GET /health">
         {health === "checking" && <Badge>checking…</Badge>}
         {health === "up" && <Badge tone="good">memory service is up</Badge>}
@@ -125,40 +108,85 @@ export default function OverviewPage() {
 
       {metrics && (
         <>
-          {/* Ingestion lag - the second thing abc.md:339 asks for. */}
+          {/* 3 - Retrieval SLO. abc.md:170 sets the 250 ms P95 budget. */}
           <Card
-            title="Ingestion lag"
-            hint="How long ago the newest event arrived. If this grows, events have stopped coming in."
+            title="Retrieval SLO"
+            hint="Search and context composition only — mixing the write path in would flatter the number."
+            right={
+              metrics.retrieval_slo.within_budget === null ? (
+                <Badge>no samples yet</Badge>
+              ) : metrics.retrieval_slo.within_budget ? (
+                <Badge tone="good">within budget</Badge>
+              ) : (
+                <Badge tone="bad">over budget</Badge>
+              )
+            }
           >
-            <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-semibold tabular-nums text-ink">
-                {lagText(metrics.ingestion_lag_seconds)}
-              </span>
-              <Badge
-                tone={
-                  metrics.ingestion_lag_seconds === null
-                    ? "neutral"
-                    : metrics.ingestion_lag_seconds < 300
-                      ? "good"
-                      : "warn"
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Stat
+                label="P50"
+                value={
+                  metrics.retrieval_slo.p50_ms === null
+                    ? "—"
+                    : `${metrics.retrieval_slo.p50_ms}ms`
                 }
-              >
-                {metrics.ingestion_lag_seconds === null
-                  ? "nothing ingested"
-                  : metrics.ingestion_lag_seconds < 300
-                    ? "fresh"
-                    : "quiet"}
-              </Badge>
+              />
+              <Stat
+                label={`P95 of ${metrics.retrieval_slo.budget_ms}ms`}
+                value={
+                  metrics.retrieval_slo.p95_ms === null
+                    ? "—"
+                    : `${metrics.retrieval_slo.p95_ms}ms`
+                }
+              />
+              <Stat
+                label="P99"
+                value={
+                  metrics.retrieval_slo.p99_ms === null
+                    ? "—"
+                    : `${metrics.retrieval_slo.p99_ms}ms`
+                }
+              />
+              <Stat label="requests measured" value={metrics.retrieval_slo.samples} />
             </div>
+
+            {metrics.retrieval_slo.p95_ms !== null && (
+              <div className="mt-3">
+                <div className="h-2 w-full rounded-full bg-raised">
+                  <div
+                    className={`h-2 rounded-full ${
+                      metrics.retrieval_slo.within_budget ? "bg-accent" : "bg-bad"
+                    }`}
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        (metrics.retrieval_slo.p95_ms / metrics.retrieval_slo.budget_ms) * 100,
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-faint">
+                  P95 against the {metrics.retrieval_slo.budget_ms}ms pilot budget,
+                  over the last {metrics.retrieval_slo.window_minutes} minutes
+                </p>
+              </div>
+            )}
           </Card>
 
-          {/* Event intake and the policy rejection rate - abc.md:143. */}
-          <Card title="Event intake" hint="Counts from the audit trail.">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {/* 2 - Ingestion lag, and the event counts beside it. */}
+          <Card
+            title="Ingestion"
+            hint="Lag is how long ago the newest event arrived. If it grows, events have stopped coming in."
+          >
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              <Stat
+                label="lag"
+                value={asDuration(metrics.ingestion_lag_seconds)}
+              />
               <Stat label="accepted" value={metrics.events.accepted} />
               <Stat label="rejected" value={metrics.events.rejected} />
-              <Stat label="duplicate (idempotent)" value={metrics.events.duplicate} />
-              <Stat label="stored raw events" value={metrics.events.stored} />
+              <Stat label="duplicate" value={metrics.events.duplicate} />
+              <Stat label="stored" value={metrics.events.stored} />
             </div>
 
             <div className="mt-4">
@@ -177,17 +205,9 @@ export default function OverviewPage() {
                 />
               </div>
             </div>
-          </Card>
 
-          {/* Why things were refused. abc.md:143 - "policy rejection rate". */}
-          <Card
-            title="Top rejection reasons"
-            hint="The stable error code each refusal returned."
-          >
-            {Object.keys(metrics.rejections_by_reason).length === 0 ? (
-              <p className="text-sm text-muted">Nothing has been refused.</p>
-            ) : (
-              <ul className="flex flex-col gap-1">
+            {Object.keys(metrics.rejections_by_reason).length > 0 && (
+              <ul className="mt-3 flex flex-col gap-1">
                 {Object.entries(metrics.rejections_by_reason)
                   .sort((a, b) => b[1] - a[1])
                   .map(([reason, count]) => (
@@ -204,30 +224,154 @@ export default function OverviewPage() {
               </ul>
             )}
           </Card>
+
+          {/* 4 - Fallback rate. A fallback is normal behaviour, not an error:
+              abc.md:167 requires retrieval to fail open. */}
+          <Card
+            title="Fallback rate"
+            hint="Requests answered without memory. Failing open is correct behaviour — the reasons are what make the rate actionable."
+          >
+            <div className="grid grid-cols-3 gap-2">
+              <Stat
+                label="fell back"
+                value={asPercent(metrics.fallback.rate, metrics.fallback.requests)}
+              />
+              <Stat label="context requests" value={metrics.fallback.requests} />
+              <Stat label="without memory" value={metrics.fallback.fell_back} />
+            </div>
+
+            {Object.keys(metrics.fallback.by_reason).length > 0 ? (
+              <ul className="mt-3 flex flex-col gap-1">
+                {Object.entries(metrics.fallback.by_reason)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([reason, count]) => (
+                    <li
+                      key={reason}
+                      className="flex items-center justify-between rounded-lg border border-edge bg-raised px-3 py-1.5"
+                    >
+                      <span className="font-mono text-xs text-muted">{reason}</span>
+                      <span className="text-sm font-semibold tabular-nums text-ink">
+                        {count}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-[11px] text-faint">
+                No fallbacks in the last {metrics.fallback.window_minutes} minutes.
+              </p>
+            )}
+          </Card>
+
+          {/* 7 - Deletion backlog. abc.md:361 blocks release outright if
+              deletion propagation is incomplete, so age matters as much as
+              count. */}
+          <Card
+            title="Deletion backlog"
+            hint="Jobs that have not finished clearing every store."
+            right={
+              metrics.deletion_backlog.unfinished === 0 ? (
+                <Badge tone="good">clear</Badge>
+              ) : (
+                <Badge tone="bad">{metrics.deletion_backlog.unfinished} unfinished</Badge>
+              )
+            }
+          >
+            <div className="grid grid-cols-3 gap-2">
+              <Stat label="unfinished" value={metrics.deletion_backlog.unfinished} />
+              <Stat label="completed" value={metrics.deletion_backlog.completed} />
+              <Stat
+                label="oldest unfinished"
+                value={asDuration(metrics.deletion_backlog.oldest_pending_seconds)}
+              />
+            </div>
+            {metrics.deletion_backlog.unfinished > 0 && (
+              <p className="mt-3 text-[11px] text-bad">
+                Release is blocked while deletion propagation is incomplete
+                (abc.md:361).
+              </p>
+            )}
+          </Card>
+
+          {/* 6 - Experiment status. abc.md:146. */}
+          <Card
+            title="Experiment status"
+            hint={metrics.experiment.experiment}
+            right={
+              metrics.experiment.has_baseline ? (
+                <Badge tone="good">baseline exists</Badge>
+              ) : (
+                <Badge tone="warn">no baseline arm</Badge>
+              )
+            }
+          >
+            <div className="grid grid-cols-3 gap-2">
+              <Stat label="memory enabled" value={metrics.experiment.memory_enabled} />
+              <Stat label="memory disabled" value={metrics.experiment.memory_disabled} />
+              <Stat label="subjects allocated" value={metrics.experiment.subjects} />
+            </div>
+            <p className="mt-3 text-[11px] text-faint">
+              A subject in the memory-disabled arm is answered with an explicit
+              no-memory package, taking the same path as any other fallback. That
+              is what gives the quality comparison something to measure against.
+            </p>
+          </Card>
+
+          {/* 5 - Quality metrics, from the most recent golden-set run. */}
+          <Card
+            title="Quality metrics"
+            hint="From the most recent golden-set run."
+            right={
+              metrics.quality ? (
+                <Link
+                  href="/quality"
+                  className="text-[11px] text-accent underline hover:brightness-110"
+                >
+                  see the run
+                </Link>
+              ) : undefined
+            }
+          >
+            {metrics.quality ? (
+              <>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <Stat
+                    label="cases passed"
+                    value={`${metrics.quality.passed}/${metrics.quality.total_cases}`}
+                  />
+                  <Stat
+                    label="precision at top"
+                    value={metrics.quality.precision_at_k?.toFixed(3) ?? "—"}
+                  />
+                  <Stat
+                    label="contradiction rate"
+                    value={metrics.quality.contradiction_rate?.toFixed(3) ?? "—"}
+                  />
+                  <Stat
+                    label="provenance"
+                    value={metrics.quality.provenance_completeness?.toFixed(3) ?? "—"}
+                  />
+                </div>
+                <p className="mt-3 text-[11px] text-faint">
+                  Provenance completeness is a release gate (abc.md:361). Run it
+                  again with{" "}
+                  <span className="font-mono">python scripts/run_golden_set.py</span>.
+                </p>
+              </>
+            ) : (
+              <div>
+                <Badge tone="warn">no run yet</Badge>
+                <p className="mt-2 text-sm text-muted">
+                  Run the golden set to fill this in:
+                </p>
+                <pre className="mt-2 rounded-lg border border-edge bg-base p-3 font-mono text-[11px] text-muted">
+                  python scripts/run_golden_set.py
+                </pre>
+              </div>
+            )}
+          </Card>
         </>
       )}
-
-      {/* What abc.md:339 asks for that cannot be shown. Named, with the
-          reason, rather than left off the screen or filled with a guess. */}
-      <Card
-        title="Not instrumented"
-        hint="abc.md:339 asks for these. No endpoint reports them, so no number is shown."
-      >
-        <ul className="flex flex-col gap-2">
-          {NOT_INSTRUMENTED.map((item) => (
-            <li
-              key={item.label}
-              className="rounded-lg border border-edge bg-raised/40 px-3 py-2"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-muted">{item.label}</span>
-                <Badge tone="warn">no data source</Badge>
-              </div>
-              <p className="mt-1 text-[11px] text-faint">{item.why}</p>
-            </li>
-          ))}
-        </ul>
-      </Card>
     </div>
   );
 }

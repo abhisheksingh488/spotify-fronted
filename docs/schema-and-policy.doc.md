@@ -10,17 +10,24 @@ state."*
 
 ## Call flow
 
-1. **`useEffect`** on load → **`get<OpenApi>("/openapi.json")`** — `lib/api.ts`
+Two reads on load, both read-only.
+
+1. **`get<OpenApi>("/openapi.json")`** — `lib/api.ts`
    → `/api/backend/openapi.json` on the console's own server, which mints the
    token and forwards it.
    → **Backend `GET /openapi.json`** — FastAPI generates this from the Pydantic
    models in `memory/models.py`. It touches no store.
 
-2. **`setSpec()`** — renders the contract version, one card per contract, then the
-   parts that have no data source.
+2. **`get<PolicyRegistry>("/policy")`** — `lib/api.ts`
+   → **Backend `GET /policy`** → **`policy.registry()`** in `memory/policy.py`,
+   which reads `data/policy_registry.yaml` — the same file the policy engine
+   enforces when it decides what a surface may use.
 
-That is the only call. The screen is read-only in the strongest sense: there is
-nothing to press, and the one endpoint it uses cannot change anything.
+3. **`setSpec()` / `setPolicy()`** — renders the contract version, the policy
+   registry, one card per contract, and the version history.
+
+The screen is read-only in the strongest sense: there is nothing to press, and
+neither endpoint it uses can change anything.
 
 ---
 
@@ -39,20 +46,28 @@ it appears here without anyone editing the frontend.
 |---|---|
 | Read-only for most roles | Yes — nothing on the screen writes |
 | Allowed fields | Yes — per contract, with type, required or optional, length and range limits, defaults and enumerated values |
-| Version history | Partly — the API version and the one accepted `schema_version` (1.0); no past versions or migrations |
-| Retention | **No** — see below |
-| Sensitivity | **No** — see below |
-| Rollout state | **No** — nothing in the backend tracks it |
+| Retention | Yes — days per memory type, with why each is kept that long |
+| Sensitivity | Yes — per memory type |
+| Rollout state | Yes — from `GET /policy` |
+| Version history | Yes — one contract version, live, and why there is no earlier one |
 
-**Retention, sensitivity and retrieval eligibility** live in the backend's
-`data/policy_registry.yaml` — exclusion 730 days, correction 730,
-explicit_preference 365, candidate_preference 90, episode 30, all `normal`
-sensitivity — and **no endpoint serves that file**. They are observable one memory
-at a time inside a `POST /v1/memories/extract` response, never as a registry.
+Retrieval eligibility is shown alongside retention, since it is the third field
+`abc.md:292` requires per type: each surface appears either in accent as allowed
+or struck through as not.
 
-No copy of those values is embedded in this screen, on purpose. A duplicated policy
-table that silently disagreed with the one being enforced would be worse than an
-empty card, so the screen names the gap and says where the truth lives.
+**Nothing is copied into this screen.** The retention numbers come from the very
+file the policy engine reads, so a rule displayed here cannot differ from the one
+applied. A duplicated policy table that silently disagreed with the enforced one
+would be worse than an empty card.
+
+The retention *values* are a local choice, and the screen says so: `abc.md`
+requires retention to vary by memory type and requires these three fields per
+type, but never states how long anything should live.
+
+**Version history** is one live contract version. That is not a gap — this is the
+first version, so there is no earlier one to migrate from, and an event declaring
+any other version is refused with `UNSUPPORTED_SCHEMA_VERSION`. Saying that is
+more honest than an empty table implying history was lost.
 
 ---
 

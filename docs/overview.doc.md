@@ -6,56 +6,90 @@
 retrieval SLO, fallback rate, quality metrics, experiment status, and deletion
 backlog."*
 
+All seven are on the screen.
+
 ---
 
 ## Call flow
 
-This screen starts on load, then repeats every ten seconds.
+Runs on load, then every ten seconds.
 
 1. **`refresh()`** — `app/page.tsx`
    Asks for health first. If the service is down there is nothing else worth
    asking for, so it stops there.
 
 2. **`getHealth()`** → **`get("/health")`** — `lib/api.ts`
-   Through `/api/backend/health` on the console's own server, which mints the
-   token and forwards it.
-   → **Backend `GET /health`** — answers `{"status": "ok"}` and touches no store.
+   → `/api/backend/health` on the console's own server, which mints the token
+   and forwards it.
+   → **Backend `GET /health`** — answers `{"status": "ok"}`, touches no store.
 
 3. **`get<Metrics>("/metrics")`** — `lib/api.ts`
-   → **Backend `GET /metrics`** → **`db.ingestion_metrics()`** in `memory/db.py`
-   → reads **PostgreSQL**: `audit_log` grouped by outcome and by reason, and
-   `max(received_at)` from `ingested_event` for the lag.
+   → **Backend `GET /metrics`** → **`db.ingestion_metrics()`** in `memory/db.py`,
+   which reads **PostgreSQL** six times:
 
-4. **`setMetrics()`** — renders four cards: health, ingestion lag, event intake
-   with the rejection rate, and the rejection reasons.
+   | Number | Table | Function |
+   |---|---|---|
+   | Event counts, rejection rate and reasons | `audit_log` | inline in `ingestion_metrics()` |
+   | Ingestion lag | `ingested_event` | inline |
+   | Retrieval SLO | `request_latency` | `retrieval_slo()` |
+   | Fallback rate | `fallback_event` | `fallback_rate()` |
+   | Deletion backlog | `deletion_job` | `deletion_backlog()` |
+   | Experiment status | `experiment_cohort` | `experiment_status()` |
+   | Quality metrics | `golden_run` | `latest_golden_run()` |
 
-Everything comes from the audit table the backend already writes, so there is no
-separate counter that could drift out of step with reality.
+4. **`setMetrics()`** — renders seven cards, one per required view.
 
 ---
 
-## What is shown, against the requirement
+## Where the numbers come from
 
-`abc.md:339` asks for seven things. Three have a data source.
+Three of the seven already had a source. The other four needed one, and
+migration `006_observability_and_experiments.sql` added it.
 
-| Asked for | Shown |
-|---|---|
-| Service health | Yes — `GET /health` |
-| Ingestion lag | Yes — seconds since the newest event, in words |
-| Retrieval SLO | **No** — nothing reports per-request latency |
-| Fallback rate | **No** — `no_memory` is per request, never aggregated |
-| Quality metrics | **No** — needs golden sets, which do not exist |
-| Experiment status | **No** — no cohort allocation is implemented |
-| Deletion backlog | **No** — only one job at a time is readable |
+**Retrieval SLO.** `abc.md:170` sets a 250 ms P95 budget. A percentile cannot be
+derived from a running average, so a middleware in `memory/api.py` writes one row
+per request into `request_latency` and `retrieval_slo()` computes P50, P95 and
+P99 from them. Only `POST /v1/memories/search` and `POST /v1/context/compose` are
+measured — the two routes the budget names. Mixing the write path in would
+flatter the number, because accepting an event is far faster than searching a
+graph. The write is best-effort: a metrics failure must never fail the request it
+was measuring.
 
-The four missing ones are listed on the screen in a **Not instrumented** card,
-each with the reason. This follows the backend README's own convention: an
-operations console must not show an invented number, and must not quietly omit a
-metric an operator is looking for.
+**Fallback rate.** Every context composition writes a row into `fallback_event`
+saying whether it answered without memory and why. Both halves are recorded, so
+the rate has a denominator as well as a numerator. The reasons are shown beside
+the rate because a high rate caused by paused consent is a different problem from
+one caused by an unhealthy graph — and `abc.md:167` makes falling open correct
+behaviour, not an error.
 
-Two extra numbers are shown beyond the list, because `/metrics` returns them and
-`abc.md:143` asks for them: the **policy rejection rate** and the **top rejection
-reasons**.
+**Deletion backlog.** Counted from `deletion_job`, with the age of the oldest
+unfinished job. Age matters as much as count: `abc.md:361` blocks release
+outright if deletion propagation is incomplete, so one job stuck for an hour is a
+release blocker while ten jobs a second old are not.
+
+**Experiment status.** `abc.md:146` asks for cohort allocation that is
+*consistent*, meaning a subject keeps its cohort. So `experiment_cohort` stores
+the allocation rather than deciding it per request.
+
+**Quality metrics.** The most recent row of `golden_run`, written by
+`scripts/run_golden_set.py`. Empty until the golden set has been run once, and
+the card says which command to run.
+
+---
+
+## What the screen judges
+
+Only two things, and both come straight from the requirement.
+
+- **Within budget** — `retrieval_slo.within_budget` is true when P95 is at or
+  under 250 ms, and null when nothing has been measured yet. A null shows as
+  *no samples yet* rather than a green tick.
+- **Deletion backlog clear** — anything unfinished prints the `abc.md:361` line
+  about release being blocked.
+
+Nothing else is interpreted. Where a number has no samples the screen prints a
+dash, because an operations console that guesses is worse than one that admits it
+has not measured anything.
 
 ---
 
@@ -65,16 +99,22 @@ reasons**.
 |---|---|---|
 | `OverviewPage()` | `app/page.tsx` | The screen; holds health, metrics and any failure. |
 | `refresh()` | same | One poll: health, then metrics. Stops early if the service is down. |
-| `lagText()` | same | Seconds into words — `42s`, `18m`, `2.1h`. Seconds alone are unreadable past a minute. |
-| `NOT_INSTRUMENTED` | same | The four missing metrics and the reason for each, so the gap is on the screen rather than in a document. |
-| `getHealth()` | `lib/api.ts` | The unauthenticated health check, through the same gateway as everything else. |
-| `get()` | `lib/api.ts` | A GET through the gateway; the token is added server-side. |
-| `Stat`, `Card`, `Badge`, `ErrorNote` | `components/ui.tsx` | A number with a caption, a panel, a state pill, a failure with its stable code. |
+| `asDuration()` | same | Seconds into words — `42s`, `18m`, `2.1h`. Seconds alone are unreadable past a minute. |
+| `asPercent()` | same | A rate as a percentage, or a dash when nothing has happened yet. |
+| `getHealth()`, `get()` | `lib/api.ts` | The two calls, through the gateway. |
+| `record_request_latency` | `memory/api.py` | The middleware that times every request. Best-effort, so measuring cannot break the measured. |
+| `retrieval_slo()`, `fallback_rate()`, `deletion_backlog()`, `experiment_status()`, `latest_golden_run()` | `memory/db.py` | One function per required number. |
+| `record_fallback()` | `memory/db.py` | Called once per context composition, fallback or not. |
 
 ---
 
 ## Worth pointing at
 
 **Stop the backend and watch this screen.** Within ten seconds it turns red and
-prints the two commands that start the API and the worker. That is the fallback
-behaviour `abc.md:158` asks for, applied to the console itself.
+prints the two commands that start the API and the worker.
+
+**Switch the subject picker to `user_003` and open Context preview.** That
+subject is in the memory-disabled arm, so it gets an explicit no-memory package —
+and the fallback rate here moves, with `memory_disabled_cohort` named as the
+reason. The baseline behaves exactly like a real fallback, which is what makes it
+a fair comparison.

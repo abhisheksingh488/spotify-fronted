@@ -81,19 +81,43 @@ Verified: `GET /metrics` through this app returns `403 NOT_ALLOWED_HERE`.
 
 ---
 
-## Pause and opt out are not connected, and the app says so
+## Pause and opt out
 
-`abc.md:136` asks for five paths. Three work. Pause and opt out both change
-**consent state**, and none of the ten endpoints in `abc.md:303-322` changes
-consent.
+`abc.md:136` asks for five paths. All five work.
 
-The memory service already honours consent: a paused subject gets an explicit
-no-memory package with the reason *"consent is paused"*, verified live. What is
-missing is any way for the listener to set it.
+**Pause** — path 4
 
-So the two buttons are shown **disabled**, with the reason written out. A switch
-that looked like it turned memory off without turning it off would be the worst
-failure this app could have — worse than not offering it.
+5. **`setConsentState("paused")`** → **`patch("/v1/consent", { state })`**
+   → **Backend `PATCH /v1/consent`** → **`db.set_consent()`** → **PostgreSQL**
+   `consent`, then **`cache.forget_subject()`** clears **Redis** so a paused
+   listener cannot be answered from a cache warmed while consent was granted
+   (`abc.md:141`). The consent change is audited inline rather than in the
+   background, so it cannot be lost.
+
+**Opt out** — path 5, the same call with `state: "denied"`.
+
+`abc.md:53` enforces consent before memory reaches retrieval, so both take effect
+on the **very next request**: `POST /v1/context/compose` returns an explicit
+no-memory package with the reason, rather than an error. The experience carries on
+without memory, which is `abc.md:158`.
+
+### Why `PATCH /v1/consent` exists at all
+
+Section 7.3's API table lists ten endpoints and none of them changes consent.
+Section 5.4 (`abc.md:136`) requires the pause and opt-out paths. That is a gap in
+the document, not a feature invented here: the consent table, the three states and
+the enforcement all existed already — there was simply no way for the person the
+consent belongs to to set it.
+
+### Pausing is not deleting
+
+`abc.md:137` keeps them separate, and the app says so in as many words. While
+paused, nothing is used and nothing is removed, so turning memory back on restores
+everything. To remove something for good the listener uses **Remove**, which
+reports its own cross-store propagation.
+
+Blurring the two would be the easiest way to mislead someone about what just
+happened to their data.
 
 ---
 

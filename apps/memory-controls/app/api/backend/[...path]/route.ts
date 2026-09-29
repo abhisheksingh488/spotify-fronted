@@ -43,6 +43,8 @@ const ALLOWED = [
   /^v1\/memories\/[^/]+$/,
   /^v1\/deletions\/[^/]+$/,
   /^v1\/feedback$/,
+  // Pause and opt out. abc.md:136 - the listener's own consent paths.
+  /^v1\/consent$/,
   /^health$/,
 ];
 

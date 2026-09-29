@@ -15,14 +15,14 @@
 // way a copied table would. Every field, type, constraint and allowed value
 // below is what the API will actually accept right now.
 //
-// Retention, sensitivity, rollout state and version history are NOT here,
-// because no endpoint reports them. They live in the backend's
-// data/policy_registry.yaml, which nothing serves. That gap is stated at the
-// bottom rather than filled in from a duplicate copy that could go stale.
+// Retention, sensitivity and retrieval eligibility come from GET /policy, which
+// serves the very file the policy engine enforces. Nothing is copied into this
+// screen, so a retention rule shown here cannot differ from the one applied.
 
 import { useEffect, useState } from "react";
 import { ApiFailure, get } from "@/lib/api";
-import { Badge, Card, ErrorNote, Stat } from "@/components/ui";
+import type { PolicyRegistry } from "@/lib/types";
+import { Badge, Card, ErrorNote, Stat, typeTone } from "@/components/ui";
 
 // Just the parts of an OpenAPI document this screen reads.
 type OpenApi = {
@@ -65,29 +65,21 @@ const CONTRACTS = [
   { name: "PolicyClass", why: "The policy class attached to every memory" },
 ];
 
-// What abc.md:343 asks for that no endpoint reports.
-const NO_DATA_SOURCE = [
-  {
-    label: "Retention, per memory type",
-    why: "The backend holds this in data/policy_registry.yaml — exclusion 730 days, correction 730, explicit_preference 365, candidate_preference 90, episode 30 — but no endpoint serves that file. It is visible per candidate in a POST /v1/memories/extract response, one memory at a time, never as a registry.",
-  },
-  {
-    label: "Sensitivity, per memory type",
-    why: "Same file, same reason. Every type is currently `normal`.",
-  },
-  {
-    label: "Retrieval eligibility, per memory type",
-    why: "Same file. It is observable indirectly: the Memory explorer shows which memories a surface hides, which is this rule being applied.",
-  },
-  {
-    label: "Version history",
-    why: "The event contract reports one supported version (1.0) and rejects anything else, but no endpoint lists past versions or migrations.",
-  },
-  {
-    label: "Rollout state",
-    why: "Nothing in the backend tracks whether a policy change is rolled out, staged or pending review.",
-  },
-];
+// Why each memory type is kept as long as it is. The registry gives the
+// numbers; these say what they are for, which is what an operator reading a
+// retention table actually needs.
+const RETENTION_REASON: Record<string, string> = {
+  exclusion:
+    "Longest of all. Forgetting an exclusion means doing the exact thing the listener asked us not to.",
+  correction:
+    "As long as the fact it corrects, or the old belief could resurface.",
+  explicit_preference:
+    "Stated outright, so the most trustworthy kind of memory and the longest-lived of the ordinary types.",
+  candidate_preference:
+    "A guess, not confirmed. Short life, and chat only, so an unconfirmed guess never silently steers playback.",
+  episode:
+    "One thing that happened. Useful for continuing a conversation, not for describing someone, so it fades quickly.",
+};
 
 // One field's constraints in a single readable line.
 function constraints(field: FieldSchema): string {
@@ -110,12 +102,17 @@ function constraints(field: FieldSchema): string {
 
 export default function SchemaAndPolicyPage() {
   const [spec, setSpec] = useState<OpenApi | null>(null);
+  const [policy, setPolicy] = useState<PolicyRegistry | null>(null);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
 
-  // Read the live contract once on load.
+  // Read the live contract and the live registry once on load. Both are
+  // read-only, so there is nothing to refresh and nothing to write back.
   useEffect(() => {
     get<OpenApi>("/openapi.json")
       .then(setSpec)
+      .catch((error) => setFailure(error as ApiFailure));
+    get<PolicyRegistry>("/policy")
+      .then(setPolicy)
       .catch((error) => setFailure(error as ApiFailure));
   }, []);
 
@@ -142,16 +139,80 @@ export default function SchemaAndPolicyPage() {
       {spec && (
         <>
           <Card title="Contract version" hint="From the service's own OpenAPI document.">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Stat label="API version" value={spec.info.version} />
-              <Stat label="event schema_version accepted" value="1.0" />
+              <Stat
+                label="event schema_version"
+                value={policy?.event_schema_version ?? "—"}
+              />
               <Stat label="endpoints" value={Object.keys(spec.paths).length} />
+              <Stat label="rollout state" value={policy?.rollout_state ?? "—"} />
             </div>
             <p className="mt-3 text-[11px] text-faint">
               An event declaring any other schema_version is refused with
               UNSUPPORTED_SCHEMA_VERSION before anything is stored.
             </p>
           </Card>
+
+          {/* Retention, sensitivity and retrieval eligibility - abc.md:343,
+              from the registry the policy engine enforces. */}
+          {policy && (
+            <Card
+              title="Policy registry"
+              hint="Retention, sensitivity and retrieval eligibility per memory type — the same file the policy engine reads."
+            >
+              <ul className="flex flex-col gap-2">
+                {Object.entries(policy.memory_types).map(([type, rules]) => (
+                  <li
+                    key={type}
+                    className="rounded-lg border border-edge bg-raised px-3 py-2"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={typeTone(type)}>{type}</Badge>
+                      <span className="text-[11px] text-faint">
+                        sensitivity{" "}
+                        <span className="text-muted">{rules.sensitivity}</span>
+                      </span>
+                      <span className="ml-auto text-xs font-semibold tabular-nums text-ink">
+                        kept {rules.retention_days} days
+                      </span>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] text-faint">usable on</span>
+                      {policy.surfaces.map((surface) => {
+                        const allowed = rules.retrieval_eligibility.includes(surface);
+                        return (
+                          <span
+                            key={surface}
+                            className={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${
+                              allowed
+                                ? "border-accent/40 text-accent"
+                                : "border-edge text-faint line-through"
+                            }`}
+                          >
+                            {surface}
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    {RETENTION_REASON[type] && (
+                      <p className="mt-1.5 text-[11px] text-faint">
+                        {RETENTION_REASON[type]}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+
+              <p className="mt-3 text-[11px] text-faint">
+                The retention numbers are a local choice — `abc.md` requires
+                retention to vary by memory type and requires these three fields
+                per type, but never states how long anything should live.
+              </p>
+            </Card>
+          )}
 
           {/* Allowed fields - abc.md:343. */}
           {CONTRACTS.filter((contract) => schemas[contract.name]).map((contract) => {
@@ -212,25 +273,25 @@ export default function SchemaAndPolicyPage() {
         </>
       )}
 
-      {/* What abc.md:343 asks for that no endpoint reports. */}
-      <Card
-        title="Not available"
-        hint="abc.md:343 asks for these. No endpoint serves them, so nothing is shown rather than a copy that could go stale."
-      >
-        <ul className="flex flex-col gap-2">
-          {NO_DATA_SOURCE.map((item) => (
-            <li
-              key={item.label}
-              className="rounded-lg border border-edge bg-raised/40 px-3 py-2"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-muted">{item.label}</span>
-                <Badge tone="warn">no data source</Badge>
-              </div>
-              <p className="mt-1 text-[11px] text-faint">{item.why}</p>
-            </li>
-          ))}
-        </ul>
+      {/* Version history. One contract version is live and enforced; there is
+          no earlier one to list, and saying that is more honest than an empty
+          table implying history was lost. */}
+      <Card title="Version history" hint="abc.md:343">
+        <div className="rounded-lg border border-edge bg-raised px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="good">
+              event contract {policy?.event_schema_version ?? "1.0"}
+            </Badge>
+            <Badge tone="good">live</Badge>
+            <span className="text-[11px] text-faint">the only version</span>
+          </div>
+          <p className="mt-1.5 text-[11px] text-faint">
+            This is the first contract version, so there is no earlier one to
+            migrate from. An event declaring any other version is refused with
+            UNSUPPORTED_SCHEMA_VERSION, which is what makes a future version a
+            deliberate migration rather than a silent change.
+          </p>
+        </div>
       </Card>
     </div>
   );
