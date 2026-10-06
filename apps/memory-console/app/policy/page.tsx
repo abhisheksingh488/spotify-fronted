@@ -202,6 +202,25 @@ export default function SchemaAndPolicyPage() {
                         {RETENTION_REASON[type]}
                       </p>
                     )}
+
+                    {/* abc.md §7.2 step 1 - definition, example and
+                        counterexample, from data/memory_types.yaml. */}
+                    {policy.definitions?.[type] && (
+                      <dl className="mt-2 grid gap-1 text-[11px]">
+                        <div>
+                          <dt className="inline font-semibold text-muted">What it is: </dt>
+                          <dd className="inline text-ink">{policy.definitions[type].definition}</dd>
+                        </div>
+                        <div>
+                          <dt className="inline font-semibold text-muted">Example: </dt>
+                          <dd className="inline text-ink">{policy.definitions[type].example}</dd>
+                        </div>
+                        <div>
+                          <dt className="inline font-semibold text-muted">Not this: </dt>
+                          <dd className="inline text-ink">{policy.definitions[type].counterexample}</dd>
+                        </div>
+                      </dl>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -211,6 +230,33 @@ export default function SchemaAndPolicyPage() {
                 retention to vary by memory type and requires these three fields
                 per type, but never states how long anything should live.
               </p>
+            </Card>
+          )}
+
+          {/* abc.md §5.4 - retention also by geography and age, from
+              data/retention_rules.yaml. They can only shorten it. */}
+          {policy?.retention_rules && (
+            <Card
+              title="Retention by geography and age"
+              hint="Applied on top of the per-type retention above. The strictest rule wins; none can make retention longer."
+            >
+              <ul className="flex flex-col gap-2 text-sm">
+                <li className="rounded-lg border border-edge bg-raised px-3 py-2">
+                  <span className="font-semibold text-ink">Strict data-protection regions</span>
+                  <span className="ml-2 text-xs text-muted">
+                    at most {policy.retention_rules.geography.strict_regions.max_retention_days} days
+                  </span>
+                  <p className="mt-1 font-mono text-[11px] text-faint wrap-anywhere">
+                    {policy.retention_rules.geography.strict_regions.countries.join(" ")}
+                  </p>
+                </li>
+                <li className="rounded-lg border border-edge bg-raised px-3 py-2">
+                  <span className="font-semibold text-ink">Listeners under 18</span>
+                  <span className="ml-2 text-xs text-muted">
+                    at most {policy.retention_rules.age.under_18.max_retention_days} days
+                  </span>
+                </li>
+              </ul>
             </Card>
           )}
 

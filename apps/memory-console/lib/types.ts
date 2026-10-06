@@ -342,6 +342,11 @@ export type Metrics = {
   deletion_backlog: DeletionBacklog;
   experiment: ExperimentStatus;
   quality: GoldenRun | null;
+
+  // abc.md §5.4 - the three counted by the backend's memory/monitoring.py.
+  write_failures: { failed: number; processed: number; rate: number };
+  cache_effectiveness: { hits: number; lookups: number; hit_rate: number };
+  policy_rejection: { excluded: number; considered: number; rate: number };
 };
 
 // --- GET /policy ----------------------------------------------------------
@@ -359,6 +364,15 @@ export type PolicyRegistry = {
   memory_types: Record<string, PolicyType>;
   surfaces: string[];
   rollout_state: string;
+
+  // abc.md §7.2 step 1 - from the backend's data/memory_types.yaml.
+  definitions: Record<string, { definition: string; example: string; counterexample: string }>;
+
+  // abc.md §5.4 - from the backend's data/retention_rules.yaml.
+  retention_rules: {
+    geography: { strict_regions: { max_retention_days: number; countries: string[] } };
+    age: { under_18: { max_retention_days: number } };
+  };
 };
 
 // --- GET and PATCH /v1/consent -------------------------------------------

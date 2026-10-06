@@ -1,100 +1,70 @@
 // Why this file exists
 // ====================
 //
-// This is the gateway, and it is the reason nobody has to handle a token.
+// The gateway: every page's call to the backend goes through here, as the
+// person who is logged in - and only as them.
 //
-// The backend has no login endpoint, on purpose. Its `memory/auth.py` says why:
+// Each person logs in with their own user id and password (app/login/page.tsx).
+// Their pass sits in an httpOnly cookie, and lib/session.ts checks it on every
+// request. No valid pass, no call - the page is sent to the login screen.
 //
-//   "There is no login here on purpose. The callers are Spotify's AI surfaces
-//    (services), not people. In production the API gateway mints these tokens
-//    after verifying the listener's existing Spotify session."
+// Everyone sees only their own data:
+//   - authentication: the pass is checked here and again by the backend
+//   - authorization: the user id is taken from the pass, never from the
+//     browser, and written into every request here - so a page cannot ask
+//     for anybody else. The backend refuses a mismatch too (SUBJECT_MISMATCH).
+//   - only the paths the pages need are allowed. GET /subjects, which lists
+//     every user, is not one of them.
 //
-// That gateway is the piece this file plays. The browser calls
-// /api/backend/v1/... with no credentials at all. This route runs on the
-// console's own server, works out which subject the operator selected, mints a
-// short-lived token with the shared secret, and forwards the request to the
-// backend with the Authorization header attached.
-//
-// Three things follow from doing it here rather than in the browser:
-//
-//   1. The operator never sees, pastes or stores a token.
-//   2. The secret never reaches the browser, and neither does the token.
-//   3. The browser never calls port 8000, so CORS stops mattering.
-//
-// The subject is NOT taken on trust. It is checked against the approved list in
-// lib/subjects.ts before anything is signed, so editing the cookie cannot point
-// the console at a subject it is not allowed to see (abc.md:340).
+// The browser never holds a pass or the secret, and never calls port 8000,
+// so CORS does not matter.
 
-import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
-import { SignJWT } from "jose";
-import { DEFAULT_SUBJECT, SUBJECT_COOKIE, isApprovedSubject } from "@/lib/subjects";
+import { BACKEND, readSession } from "@/lib/session";
 
-// Where the backend is. Server-side only - no NEXT_PUBLIC_ prefix, because the
-// browser has no business knowing.
-const BACKEND = process.env.MEMORY_API_BASE_URL ?? "http://127.0.0.1:8000";
+// The paths the pages use. Everything else is refused.
+//   v1/...         the ten endpoints - every one is scoped to the subject
+//   metrics, quality/runs, policy, openapi.json, health
+//                  counts, rules and schemas only - nobody's data
+const ALLOWED = [
+  /^v1\/.+$/,
+  /^metrics$/,
+  /^quality\/runs$/,
+  /^policy$/,
+  /^openapi\.json$/,
+  /^health$/,
+];
 
-// The same secret the backend signs with (its .env MEMORY_JWT_SECRET). Without
-// it this route cannot mint anything, and says so plainly.
-const SECRET = process.env.MEMORY_JWT_SECRET;
-
-// Matches the backend's TOKEN_LIFETIME in memory/auth.py. Short on purpose -
-// abc.md's threat model calls out replay of stale tokens.
-const LIFETIME_SECONDS = 15 * 60;
-
-// Which service is calling. The backend records this beside the subject on
-// every audited action, so an operator's work is distinguishable from a
-// listener's surface.
-const SERVICE_ID = "memory-console";
-
-// The headers worth passing through in each direction. Everything else is
-// dropped rather than forwarded blindly.
+// The headers worth passing through in each direction.
 const FORWARD_TO_BACKEND = ["content-type", "x-correlation-id"];
 const RETURN_TO_BROWSER = ["content-type", "x-correlation-id"];
 
-// Stamp a token for one subject - the same claims memory/auth.py expects:
-// sub, svc, iat and exp.
-async function mintToken(subjectId: string): Promise<string> {
-  const key = new TextEncoder().encode(SECRET);
-  return new SignJWT({ sub: subjectId, svc: SERVICE_ID })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(`${LIFETIME_SECONDS}s`)
-    .sign(key);
+// A refusal in the same shape the backend uses.
+function refuse(status: number, code: string, message: string): Response {
+  return Response.json({ detail: { code, message, correlation_id: "" } }, { status });
 }
 
-// Which subject the operator is currently acting as, refusing anything that is
-// not on the approved list.
-async function currentSubject(): Promise<string> {
-  const store = await cookies();
-  const chosen = store.get(SUBJECT_COOKIE)?.value ?? DEFAULT_SUBJECT;
-  return isApprovedSubject(chosen) ? chosen : DEFAULT_SUBJECT;
-}
-
-// Do the work for whichever method came in: mint, forward, hand back.
+// Check who is logged in, check the path, put their id in, forward, hand back.
 async function proxy(request: NextRequest, path: string[]): Promise<Response> {
-  if (!SECRET) {
-    return Response.json(
-      {
-        detail: {
-          code: "CONSOLE_NOT_CONFIGURED",
-          message:
-            "MEMORY_JWT_SECRET is not set for the console. Copy .env.local.example " +
-            "to .env.local and put the backend's MEMORY_JWT_SECRET in it.",
-          correlation_id: "",
-        },
-      },
-      { status: 500 },
-    );
+  const session = await readSession();
+  if (!session) return refuse(401, "UNAUTHENTICATED", "Please log in.");
+
+  const joined = path.join("/");
+  if (!ALLOWED.some((pattern) => pattern.test(joined))) {
+    return refuse(403, "NOT_ALLOWED_HERE", `This app may not call /${joined}.`);
   }
 
-  const subjectId = await currentSubject();
-  const token = await mintToken(subjectId);
+  // The logged-in user's id goes into the query string and the body,
+  // overwriting anything the browser sent. Endpoints that take no subject
+  // simply ignore it.
+  const query = new URLSearchParams(request.nextUrl.search);
+  if (query.has("subject_id") || joined.startsWith("v1/")) {
+    query.set("subject_id", session.subjectId);
+  }
+  const search = query.toString();
+  const target = `${BACKEND}/${joined}${search ? `?${search}` : ""}`;
 
-  // Keep the query string - endpoints 8, 9 and 10 take subject_id there.
-  const target = `${BACKEND}/${path.join("/")}${request.nextUrl.search}`;
-
-  const headers = new Headers({ Authorization: `Bearer ${token}` });
+  const headers = new Headers({ Authorization: `Bearer ${session.token}` });
   for (const name of FORWARD_TO_BACKEND) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
@@ -102,27 +72,26 @@ async function proxy(request: NextRequest, path: string[]): Promise<Response> {
 
   // A GET or DELETE has no body to read.
   const hasBody = request.method !== "GET" && request.method !== "DELETE";
+  let body: string | undefined;
+  if (hasBody) {
+    const raw = await request.text();
+    try {
+      body = JSON.stringify({ ...(raw ? JSON.parse(raw) : {}), subject_id: session.subjectId });
+    } catch {
+      return refuse(422, "VALIDATION_FAILED", "the request body is not valid JSON");
+    }
+  }
 
   let response: Response;
   try {
-    response = await fetch(target, {
-      method: request.method,
-      headers,
-      body: hasBody ? await request.text() : undefined,
-      cache: "no-store",
-    });
+    response = await fetch(target, { method: request.method, headers, body, cache: "no-store" });
   } catch {
-    // The backend is not running, or not on that port. Say which, because
-    // this is the single most common thing to go wrong in a demo.
-    return Response.json(
-      {
-        detail: {
-          code: "BACKEND_UNREACHABLE",
-          message: `The console cannot reach the backend at ${BACKEND}. Start it with: python -m uvicorn memory.api:app --reload --port 8000`,
-          correlation_id: "",
-        },
-      },
-      { status: 503 },
+    // The single most common thing to go wrong in a demo, so say which.
+    return refuse(
+      503,
+      "BACKEND_UNREACHABLE",
+      `The app cannot reach the backend at ${BACKEND}. Start it with: ` +
+        "python -m uvicorn memory.api:app --port 8000",
     );
   }
 
@@ -131,13 +100,7 @@ async function proxy(request: NextRequest, path: string[]): Promise<Response> {
     const value = response.headers.get(name);
     if (value) out.set(name, value);
   }
-  // So a screen can show which subject the answer is about without guessing.
-  out.set("X-Acting-Subject", subjectId);
-
-  return new Response(await response.text(), {
-    status: response.status,
-    headers: out,
-  });
+  return new Response(await response.text(), { status: response.status, headers: out });
 }
 
 // Next needs one export per method. Each is the same two lines.

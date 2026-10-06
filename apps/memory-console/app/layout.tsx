@@ -1,7 +1,7 @@
 // Why this file exists
 // ====================
 //
-// The frame every screen sits in: the sidebar on the left, the subject picker
+// The frame every screen sits in: the sidebar on the left, the logged-in user's bar
 // across the top, the screen underneath. Written once here so no screen has to
 // think about layout, and none of them has to think about tokens at all - the
 // console's own server signs every request (app/api/backend/[...path]/route.ts).

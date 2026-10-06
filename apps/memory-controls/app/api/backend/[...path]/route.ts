@@ -1,39 +1,21 @@
 // Why this file exists
 // ====================
 //
-// The gateway for the listener-facing app, and the one important difference
-// from the console's version: the subject is fixed.
+// The gateway for the listener-facing app: every call to the backend goes
+// through here, as the listener who is logged in.
 //
-// A listener can only ever see their own memories. There is no picker and no
-// cookie to change, because there is nothing for them to choose. The subject
-// comes from MEMORY_SUBJECT_ID on the server, standing in for the signed-in
-// Spotify session that a real deployment would read
-// (backend memory/auth.py: "the API gateway mints these tokens after verifying
-// the listener's existing Spotify session").
+// The listener logs in with their own user id and password (app/login/page.tsx).
+// Their pass sits in an httpOnly cookie, and lib/session.ts checks it here on
+// every request. No valid pass, no call - the page is sent to the login screen.
 //
-// Nothing the browser sends can change which subject is used, so the strongest
-// requirement in the whole document - one listener can never reach another
-// listener's memories - holds here by construction rather than by a check.
+// The subject is never taken from the browser. It comes from the checked pass,
+// and is written into every request here, so the page cannot ask for anybody
+// else. The backend checks again on its side (bind_subject: SUBJECT_MISMATCH).
+// One listener can never reach another listener's memories - abc.md's
+// strongest requirement - and it holds by construction, not by a check alone.
 
 import { NextRequest } from "next/server";
-import { SignJWT } from "jose";
-
-// Where the backend is. Server-side only, so the browser never learns it.
-const BACKEND = process.env.MEMORY_API_BASE_URL ?? "http://127.0.0.1:8000";
-
-// The same secret the backend signs with.
-const SECRET = process.env.MEMORY_JWT_SECRET;
-
-// Who is signed in. In a real deployment this comes from the session, not an
-// environment variable; here it is the one listener this app is running for.
-const SUBJECT_ID = process.env.MEMORY_SUBJECT_ID ?? "user_001";
-
-// Matches TOKEN_LIFETIME in the backend's memory/auth.py.
-const LIFETIME_SECONDS = 15 * 60;
-
-// Which service is calling, recorded beside every audited action so a
-// listener's own change is distinguishable from an operator's.
-const SERVICE_ID = "memory-controls";
+import { BACKEND, readSession } from "@/lib/session";
 
 // Only the endpoints this app is allowed to reach. A listener's app has no
 // business calling /metrics or extraction, so the list is closed rather than
@@ -48,49 +30,34 @@ const ALLOWED = [
   /^health$/,
 ];
 
-// Stamp a token for the signed-in listener.
-async function mintToken(): Promise<string> {
-  const key = new TextEncoder().encode(SECRET);
-  return new SignJWT({ sub: SUBJECT_ID, svc: SERVICE_ID })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(`${LIFETIME_SECONDS}s`)
-    .sign(key);
-}
-
 // A refusal in the same envelope the backend uses, so the app handles it the
 // same way as any other failure.
 function refuse(status: number, code: string, message: string): Response {
   return Response.json({ detail: { code, message, correlation_id: "" } }, { status });
 }
 
-// Mint, check the path is allowed, forward, hand back.
+// Check who is logged in, check the path is allowed, forward, hand back.
 async function proxy(request: NextRequest, path: string[]): Promise<Response> {
-  if (!SECRET) {
-    return refuse(
-      500,
-      "APP_NOT_CONFIGURED",
-      "MEMORY_JWT_SECRET is not set. Copy .env.local.example to .env.local and " +
-        "put the backend's MEMORY_JWT_SECRET in it.",
-    );
+  const session = await readSession();
+  if (!session) {
+    return refuse(401, "UNAUTHENTICATED", "Please log in.");
   }
+  const SUBJECT_ID = session.subjectId;
 
   const joined = path.join("/");
   if (!ALLOWED.some((pattern) => pattern.test(joined))) {
     return refuse(403, "NOT_ALLOWED_HERE", `This app may not call /${joined}.`);
   }
 
-  const token = await mintToken();
-
   // The subject is added here, not sent by the browser. The backend wants it in
   // the body on POST and PATCH, and in the query string on GET and DELETE, so
-  // both are filled in from SUBJECT_ID. The page never mentions a subject at
+  // both are filled in from the logged-in listener. The page never mentions a subject at
   // all, which is what makes it impossible for it to ask for the wrong one.
   const query = new URLSearchParams(request.nextUrl.search);
   query.set("subject_id", SUBJECT_ID);
   const target = `${BACKEND}/${joined}?${query.toString()}`;
 
-  const headers = new Headers({ Authorization: `Bearer ${token}` });
+  const headers = new Headers({ Authorization: `Bearer ${session.token}` });
   const contentType = request.headers.get("content-type");
   if (contentType) headers.set("content-type", contentType);
 

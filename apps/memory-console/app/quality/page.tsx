@@ -321,9 +321,9 @@ export default function QualityReviewPage() {
               <p className="mt-3 text-[11px] text-faint">
                 A subject in the memory-disabled arm gets an explicit no-memory
                 package, taking the same path as any other fallback rather than a
-                special case — which is what makes it a fair baseline. Switch the
-                subject picker to a memory-disabled subject and open Context
-                preview to see that side by side.
+                special case — which is what makes it a fair baseline. Log in as
+                user_003 (in the memory-disabled arm) and open Context preview
+                to see it.
               </p>
             </Card>
           )}

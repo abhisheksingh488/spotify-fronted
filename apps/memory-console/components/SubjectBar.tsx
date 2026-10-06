@@ -3,88 +3,100 @@
 // Why this file exists
 // ====================
 //
-// This replaced a box that asked an operator to paste a JWT.
+// The bar across the top of every page: who is logged in, whether their
+// memory is on, and the way out.
 //
-// Pasting a token is not a product - it is a test harness. The console's own
-// server now mints the token (app/api/backend/[...path]/route.ts), so all that
-// is left to choose is which subject we are looking at. That is one dropdown.
+// There is no "view as somebody else" any more. Everyone logs in with their
+// own user id and password and sees only their own data, so the bar only ever
+// shows the logged-in user.
 //
-// The cookie this writes holds a subject id and nothing else. No secret, no
-// token. The server checks the id against the approved list before it signs
-// anything, so changing the cookie by hand cannot widen what the console can
-// see (abc.md:340 - approved support or test identities only).
+// It is also the guard: if nobody is logged in, or the pass has expired, it
+// sends the browser to the login page. The gateway refuses every data call
+// without a valid pass anyway (app/api/backend/[...path]/route.ts) - this just
+// gets the person to the login screen instead of a page full of errors.
+//
+// Memory on / paused / off is the listener's consent (abc.md:136 - pause and
+// opt-out), changed through PATCH /v1/consent. Pausing keeps memories but stops
+// using them; switching off stops capture too. Neither deletes anything.
 
 import { useEffect, useState } from "react";
-import { DEFAULT_SUBJECT, SUBJECTS, SUBJECT_COOKIE } from "@/lib/subjects";
-import { Badge, inputClass } from "./ui";
+import { usePathname } from "next/navigation";
+import { Badge, Button, inputClass } from "./ui";
 
-// Read one cookie from the browser, or an empty string.
-function readCookie(name: string): string {
-  if (typeof document === "undefined") return "";
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : "";
-}
+type Consent = "granted" | "paused" | "denied";
+
+// What each consent state means, in words for the bar.
+const LABELS: Record<Consent, string> = {
+  granted: "memory on",
+  paused: "memory paused",
+  denied: "memory off",
+};
 
 export default function SubjectBar() {
-  const [subject, setSubject] = useState(DEFAULT_SUBJECT);
+  const path = usePathname();
+  const [who, setWho] = useState("");
+  const [consent, setConsent] = useState<Consent | null>(null);
 
-  // Pick up whatever was chosen last time, after mount so the server and the
-  // browser render the same thing.
+  // Who is logged in; nobody means the login page.
   useEffect(() => {
-    const saved = readCookie(SUBJECT_COOKIE);
-    if (saved) setSubject(saved);
-  }, []);
+    if (path === "/login") return;
+    fetch("/api/auth/me").then(async (response) => {
+      if (!response.ok) {
+        window.location.href = "/login";
+        return;
+      }
+      setWho((await response.json()).subject_id);
+      const state = await fetch("/api/backend/v1/consent").then((r) => (r.ok ? r.json() : null));
+      if (state) setConsent(state.state);
+    });
+  }, [path]);
 
-  // Remember the choice and reload, so every screen re-fetches as the new
-  // subject rather than showing the previous one's results.
-  function choose(next: string) {
-    setSubject(next);
-    document.cookie = `${SUBJECT_COOKIE}=${encodeURIComponent(next)}; path=/; max-age=86400; samesite=lax`;
+  // Turn memory on, pause it, or switch it off, then reload so every page
+  // reflects it.
+  async function changeConsent(state: Consent) {
+    await fetch("/api/backend/v1/consent", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state }),
+    });
     window.location.reload();
   }
 
-  const current = SUBJECTS.find((entry) => entry.id === subject);
-  const consent = current?.consent ?? "granted";
+  // Forget the pass and go back to the login page.
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  }
+
+  if (path === "/login" || !who) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-3 border-b border-edge bg-panel px-4 py-2 text-sm">
-      <span className="text-muted">Viewing as</span>
-
-      <select
-        className={`${inputClass} w-auto py-1`}
-        value={subject}
-        onChange={(event) => choose(event.target.value)}
-      >
-        {SUBJECTS.map((entry) => (
-          <option key={entry.id} value={entry.id}>
-            {entry.id} — {entry.note}
-          </option>
-        ))}
-      </select>
-
-      {/* Consent is the first thing every endpoint checks, so it belongs where
-          it cannot be missed. A denied or paused subject is not a broken
-          console - it is the policy working. */}
-      <Badge
-        tone={consent === "granted" ? "good" : consent === "paused" ? "warn" : "bad"}
-      >
-        consent: {consent}
-      </Badge>
-
-      {consent === "denied" && (
-        <span className="text-[11px] text-faint">
-          expect 403 CONSENT_DENIED on the write path
-        </span>
-      )}
-      {consent === "paused" && (
-        <span className="text-[11px] text-faint">
-          expect a no-memory context package, not an error
-        </span>
-      )}
-
-      <span className="ml-auto text-[11px] text-faint">
-        the console signs its own requests — no token to handle
+      <span className="text-muted">
+        Logged in as <span className="font-semibold text-ink">{who}</span>
       </span>
+
+      {consent && (
+        <>
+          <Badge tone={consent === "granted" ? "good" : consent === "paused" ? "warn" : "bad"}>
+            {LABELS[consent]}
+          </Badge>
+          <select
+            className={`${inputClass} w-auto py-1`}
+            value={consent}
+            onChange={(event) => changeConsent(event.target.value as Consent)}
+          >
+            <option value="granted">turn memory on</option>
+            <option value="paused">pause memory (keep, don&apos;t use)</option>
+            <option value="denied">turn memory off</option>
+          </select>
+        </>
+      )}
+
+      <span className="ml-auto text-[11px] text-faint">you only ever see your own data</span>
+      <Button variant="ghost" onClick={logout}>
+        Log out
+      </Button>
     </div>
   );
 }

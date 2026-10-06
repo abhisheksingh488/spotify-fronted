@@ -26,6 +26,9 @@ const SCREENS = [
 export default function Nav() {
   const path = usePathname();
 
+  // The login page stands on its own, with no menu.
+  if (path === "/login") return null;
+
   return (
     <nav className="flex w-60 shrink-0 flex-col gap-1 border-r border-edge bg-panel p-3">
       <div className="px-2 pb-3">

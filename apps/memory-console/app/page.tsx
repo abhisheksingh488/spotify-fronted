@@ -293,6 +293,34 @@ export default function OverviewPage() {
             )}
           </Card>
 
+          {/* Write failures, cache and policy - abc.md §5.4 asks these to be
+              monitored; counted by the backend's memory/monitoring.py. */}
+          <Card
+            title="Write failures, cache and policy"
+            hint="Events the worker could not store, repeats the cache caught, and memories policy removed."
+          >
+            <div className="grid grid-cols-3 gap-2">
+              <Stat
+                label={`write failures of ${metrics.write_failures.processed}`}
+                value={metrics.write_failures.failed}
+              />
+              <Stat
+                label={`cache hit rate (${metrics.cache_effectiveness.hits} of ${metrics.cache_effectiveness.lookups})`}
+                value={`${(metrics.cache_effectiveness.hit_rate * 100).toFixed(0)}%`}
+              />
+              <Stat
+                label={`policy rejections (${metrics.policy_rejection.excluded} of ${metrics.policy_rejection.considered})`}
+                value={`${(metrics.policy_rejection.rate * 100).toFixed(0)}%`}
+              />
+            </div>
+            {metrics.write_failures.failed > 0 && (
+              <p className="mt-3 text-[11px] text-faint">
+                Failed events wait in the dead-letter queue. Once the cause is
+                fixed, replay them with: python scripts/replay_dead_letters.py
+              </p>
+            )}
+          </Card>
+
           {/* 6 - Experiment status. abc.md:146. */}
           <Card
             title="Experiment status"

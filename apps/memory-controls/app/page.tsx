@@ -126,10 +126,26 @@ export default function MemoryControlsPage() {
     }
   }
 
+  // Who is logged in. Nobody, or an expired pass, means the login page.
+  const [who, setWho] = useState<string | null>(null);
+
   useEffect(() => {
-    load();
-    loadConsent();
+    fetch("/api/auth/me").then(async (response) => {
+      if (!response.ok) {
+        window.location.href = "/login";
+        return;
+      }
+      setWho((await response.json()).subject_id);
+      load();
+      loadConsent();
+    });
   }, []);
+
+  // Forget the pass and go back to the login page.
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  }
 
   // Correct the wording. The old version is kept as history rather than
   // overwritten, so a correction can itself be reviewed later.
@@ -207,8 +223,20 @@ export default function MemoryControlsPage() {
     ([, state]) => !["deleted", "nothing_to_delete", "retained_by_policy"].includes(state),
   );
 
+  // Nothing to show until we know who is logged in.
+  if (!who) return null;
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-muted">
+          Logged in as <span className="font-semibold text-ink">{who}</span>
+        </span>
+        <Button variant="ghost" onClick={logout}>
+          Log out
+        </Button>
+      </div>
+
       {note && (
         <div className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-sm text-accent">
           {note}

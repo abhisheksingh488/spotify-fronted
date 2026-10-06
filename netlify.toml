@@ -1,0 +1,17 @@
+# Why this file exists
+# ====================
+#
+# Tells Netlify which app in this repository to deploy: the memory console in
+# apps/memory-console - the one app with login and all seven pages.
+#
+# Netlify detects Next.js and runs it with its own adapter. Check its docs
+# list the Next.js version in apps/memory-console/package.json before relying
+# on it; Vercel is the fallback.
+#
+# Set two environment variables in Netlify's site settings (never here):
+#   MEMORY_API_BASE_URL   the deployed backend, e.g. https://memory-api.onrender.com
+#   MEMORY_JWT_SECRET     the same secret the backend uses
+
+[build]
+  base = "apps/memory-console"
+  command = "npm run build"

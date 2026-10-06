@@ -80,6 +80,10 @@ async function request<T>(
     });
   }
 
+  // Not logged in, or the pass expired: back to the login page.
+  if (response.status === 401 && typeof window !== "undefined") {
+    window.location.href = "/login";
+  }
   if (!response.ok) throw await toFailure(response);
   return (await response.json()) as T;
 }

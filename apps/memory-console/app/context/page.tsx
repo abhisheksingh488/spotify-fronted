@@ -43,8 +43,36 @@ const WEIGHTS: Record<string, number> = {
   negative_feedback: 0.05,
 };
 
+// Words that say nothing about which music, dropped before searching for songs.
+const FILLER = new Set([
+  "the", "listener", "loves", "love", "likes", "like", "enjoys", "prefers",
+  "does", "not", "want", "wants", "no", "any", "some", "something", "songs",
+  "song", "music", "play", "put", "on", "me", "a", "an", "by", "to", "of",
+  "for", "and", "please", "when", "while", "i", "give", "played", "listen",
+]);
+
+// Keep the words that describe the music.
+function keywords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((word) => word && !FILLER.has(word));
+}
+
+// A song from the demo search.
+type Song = {
+  title: string;
+  artist: string;
+  album: string;
+  genre: string;
+  artwork: string;
+  preview: string;
+  link: string;
+};
+
 export default function ContextPreviewPage() {
-  // Whichever subject the picker at the top is set to.
+  // Whoever is logged in.
   const subjectId = useSubject();
   const [intent, setIntent] = useState("put some music on");
   const [surface, setSurface] = useState<Surface>("player");
@@ -55,6 +83,66 @@ export default function ContextPreviewPage() {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // "Tell Spotify's AI" - what the logged-in listener says, sent as an event.
+  const [saying, setSaying] = useState("");
+  const [told, setTold] = useState("");
+
+  // Send one sentence as an event (POST /v1/events). The gateway adds the
+  // logged-in user's id, so it can only ever become their own memory. The
+  // worker turns it into memories a few seconds later.
+  async function tell() {
+    setTold("");
+    setFailure(null);
+    const key = `console_${Date.now()}`;
+    try {
+      await post("/v1/events", {
+        schema_version: "1.0",
+        event_type: "ai_interaction",
+        surface,
+        locale: "en-US",
+        occurred_at: new Date().toISOString(),
+        consent_state: "granted",
+        source_event_id: key,
+        idempotency_key: key,
+        content: saying,
+      });
+      setTold(`Saved. In a few seconds it becomes a memory - then ask below.`);
+      setSaying("");
+    } catch (error) {
+      setFailure(error as ApiFailure);
+    }
+  }
+
+  // The demo song search that runs after the pack is built.
+  const [songs, setSongs] = useState<Song[] | null>(null);
+  const [songTerm, setSongTerm] = useState("");
+  const [songError, setSongError] = useState("");
+
+  // Stand in for the AI that would pick songs: search with the request plus
+  // the top preference in the pack, and skip genres the pack excludes.
+  async function findSongs(composed: ContextPackage) {
+    const liked = composed.items.find((item) => item.memory_type !== "exclusion");
+    const excluded = composed.items
+      .filter((item) => item.memory_type === "exclusion")
+      .flatMap((item) => keywords(item.fact));
+
+    const words = [...keywords(intent), ...(liked ? keywords(liked.fact) : [])];
+    const term = [...new Set(words)].join(" ");
+    setSongTerm(term);
+
+    try {
+      const response = await fetch(
+        `/api/songs?term=${encodeURIComponent(term)}&exclude=${encodeURIComponent(excluded.join(","))}`,
+      );
+      const body = await response.json();
+      setSongs(body.songs ?? []);
+      setSongError(body.error ?? "");
+    } catch {
+      setSongs([]);
+      setSongError("The song search did not answer.");
+    }
+  }
+
   // Run the two calls the preview is built from, in the order the backend
   // runs them, and keep whichever results arrive.
   async function run() {
@@ -62,6 +150,8 @@ export default function ContextPreviewPage() {
     setFailure(null);
     setSearch(null);
     setPack(null);
+    setSongs(null);
+    setSongError("");
     try {
       const found = await post<SearchResult>("/v1/memories/search", {
         subject_id: subjectId,
@@ -78,6 +168,7 @@ export default function ContextPreviewPage() {
         token_budget: budget,
       });
       setPack(composed);
+      await findSongs(composed);
     } catch (error) {
       setFailure(error as ApiFailure);
     } finally {
@@ -100,11 +191,30 @@ export default function ContextPreviewPage() {
       </header>
 
       <Card
+        title="Tell Spotify's AI"
+        hint="Say something about what you like or don't like. It is saved as your memory, never anyone else's."
+      >
+        <div className="flex flex-wrap gap-2">
+          <input
+            className={`${inputClass} min-w-0 flex-1`}
+            placeholder="e.g. I love Arijit Singh romantic songs, but no heavy metal"
+            value={saying}
+            onChange={(event) => setSaying(event.target.value)}
+            onKeyDown={(event) => event.key === "Enter" && saying.trim() && tell()}
+          />
+          <Button onClick={tell} disabled={!saying.trim()}>
+            Tell
+          </Button>
+        </div>
+        {told && <p className="mt-2 text-sm text-accent">{told}</p>}
+      </Card>
+
+      <Card
         title="The request"
         hint="Same fields an orchestrator sends to /v1/context/compose."
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Subject" hint="Change this with the picker at the top.">
+          <Field label="Subject" hint="You - the logged-in user. Nobody else's data is used.">
             <div className={`${inputClass} text-faint`}>{subjectId}</div>
           </Field>
 
@@ -352,6 +462,56 @@ export default function ContextPreviewPage() {
                 </p>
               </div>
             </>
+          )}
+        </Card>
+      )}
+
+      {/* Step 6 - a demo of what the AI would do with the pack. */}
+      {songs && (
+        <Card
+          title="4 · Songs (demo)"
+          hint="Not part of the memory system: a stand-in for the AI that would pick songs from this pack. 30-second previews from the iTunes Search API."
+        >
+          <p className="mb-3 text-[11px] text-faint wrap-anywhere">
+            searched for: <span className="font-mono">{songTerm || "-"}</span>
+          </p>
+
+          {songError && <p className="mb-3 text-sm text-bad">{songError}</p>}
+
+          {songs.length === 0 && !songError ? (
+            <p className="text-sm text-muted">No songs found for this search.</p>
+          ) : (
+            <ol className="flex flex-col gap-2">
+              {songs.map((song) => (
+                <li
+                  key={song.preview}
+                  className="flex flex-wrap items-center gap-3 rounded-lg border border-edge bg-raised p-3"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={song.artwork}
+                    alt=""
+                    width={48}
+                    height={48}
+                    className="rounded"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <a
+                      href={song.link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm font-semibold text-ink hover:underline wrap-anywhere"
+                    >
+                      {song.title}
+                    </a>
+                    <p className="text-[11px] text-faint wrap-anywhere">
+                      {song.artist} · {song.album} · {song.genre}
+                    </p>
+                  </div>
+                  <audio controls preload="none" src={song.preview} className="h-8" />
+                </li>
+              ))}
+            </ol>
           )}
         </Card>
       )}

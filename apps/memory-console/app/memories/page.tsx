@@ -7,10 +7,9 @@
 // approved support or test identities; show timeline, graph relationships,
 // source type, confidence, and status."
 //
-// "Search only with approved support or test identities" is why there is no free
-// text box for a subject id here: the subject comes from the picker at the top,
-// whose list is the approved allow-list in lib/subjects.ts, checked again on the
-// server before any token is signed.
+// There is no box for a subject id here: the subject is always the logged-in
+// user, taken from their checked pass by the gateway
+// (app/api/backend/[...path]/route.ts), so nobody can look at anyone else.
 //
 // Of the five things it must show, the search endpoint returns three directly -
 // graph relationships (the entities each memory is about), source type (the
@@ -132,14 +131,14 @@ export default function MemoryExplorerPage() {
         <h1 className="text-xl font-semibold">Memory explorer</h1>
         <p className="mt-1 text-sm text-muted">
           Everything held for{" "}
-          <span className="font-mono text-ink">{subjectId}</span>. Change the
-          subject with the picker at the top.
+          <span className="font-mono text-ink">{subjectId}</span> - you only
+          ever see your own memories.
         </p>
       </header>
 
       <Card
         title="Find"
-        hint="Leave the box empty to see everything. Only approved test identities are selectable."
+        hint="Leave the box empty to see everything you have told us."
       >
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="sm:col-span-2">
