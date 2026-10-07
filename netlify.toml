@@ -19,6 +19,15 @@
   # serves the folder as plain files and every page answers 404.
   publish = ".next"
 
+[build.environment]
+  # Netlify's secret scanner stops the build when a secret's value appears
+  # in any file. Next.js's own build cache (.next/cache) holds the server
+  # settings it compiled with, including MEMORY_JWT_SECRET. That cache is
+  # internal to the build and never served - so only it is skipped. The
+  # scanner still checks everything that is deployed, including all
+  # browser JavaScript, and found no secret there.
+  SECRETS_SCAN_OMIT_PATHS = ".netlify/.next/cache/**,.next/cache/**"
+
 # Netlify's official Next.js runtime: turns the app's pages and API routes
 # (login, the gateway, songs) into Netlify functions. Netlify usually adds it
 # on its own; naming it makes sure it always runs.
