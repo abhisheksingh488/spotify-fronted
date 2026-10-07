@@ -5,7 +5,7 @@ you like, and see exactly what it remembers, how it ranks it, and what reaches
 the model - for your own account only.
 
 **Backend:** https://github.com/omsemwal/spotify-personalized-ai
-**Live app:** _to be added after deployment_
+**Live app:** https://spotifyfrontend11.netlify.app
 
 Stack is `abc.md:200`: *Next.js, React, Tailwind CSS*.
 
