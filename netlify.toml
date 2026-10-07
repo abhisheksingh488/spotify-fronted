@@ -15,3 +15,6 @@
 [build]
   base = "apps/memory-console"
   command = "npm run build"
+  # Where Next.js puts the built app, relative to `base`. Without it Netlify
+  # serves the folder as plain files and every page answers 404.
+  publish = ".next"
