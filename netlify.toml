@@ -18,3 +18,9 @@
   # Where Next.js puts the built app, relative to `base`. Without it Netlify
   # serves the folder as plain files and every page answers 404.
   publish = ".next"
+
+# Netlify's official Next.js runtime: turns the app's pages and API routes
+# (login, the gateway, songs) into Netlify functions. Netlify usually adds it
+# on its own; naming it makes sure it always runs.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
