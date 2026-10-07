@@ -16,7 +16,7 @@ npm run build
 ## How it works
 
 **Log in first.** Each listener signs up or logs in with their own user id and
-password (`app/login/page.tsx`); the test users use `demo1234`. The gateway
+password (`app/login/page.tsx`). The gateway
 takes the user id from the login pass and writes it into every request, so
 nothing the browser sends can reach anybody else's memories.
 

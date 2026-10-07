@@ -168,5 +168,5 @@ cp .env.local.example .env.local     # add the backend MEMORY_JWT_SECRET
 npm install && npm run dev           # http://localhost:3001
 ```
 
-Log in as `user_005` (password `demo1234`) to see what a listener with paused
+Log in as `user_005` (locally, with `DEMO_PASSWORD`) to see what a listener with paused
 consent sees.

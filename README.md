@@ -16,7 +16,7 @@ Stack is `abc.md:200`: *Next.js, React, Tailwind CSS*.
 | | |
 |---|---|
 | New user | Open the app, choose **Create an account**: a user id nobody has (lower-case letters, digits, `_`) and a password of 8+ characters |
-| Test users | `user_001` ... `user_005`, password `demo1234` (demo only) |
+| Test users (local only) | `user_001` ... `user_005`, with the password set as `DEMO_PASSWORD` in the backend's private `.env` |
 
 After logging in, **every page shows only your own data**. How that is
 enforced: [how-authentication-works.doc.md](docs/how-authentication-works.doc.md).

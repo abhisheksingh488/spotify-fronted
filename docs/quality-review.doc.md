@@ -118,8 +118,8 @@ A subject in the memory-disabled arm gets an explicit no-memory package from
 `POST /v1/context/compose`, taking the same path as any other fallback rather
 than a special case — which is what makes it a fair baseline.
 
-`user_003` is allocated to that arm. Log in as `user_003` (password
-`demo1234`) and open **Context preview** to see it.
+`user_003` is allocated to that arm. Log in as `user_003` (locally, with
+`DEMO_PASSWORD`) and open **Context preview** to see it.
 
 ---
 

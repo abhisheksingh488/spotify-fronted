@@ -113,7 +113,7 @@ has not measured anything.
 **Stop the backend and watch this screen.** Within ten seconds it turns red and
 prints the two commands that start the API and the worker.
 
-**Log in as `user_003` (password `demo1234`) and open Context preview.** That
+**Log in as `user_003` (locally, with `DEMO_PASSWORD`) and open Context preview.** That
 subject is in the memory-disabled arm, so it gets an explicit no-memory package —
 and the fallback rate here moves, with `memory_disabled_cohort` named as the
 reason. The baseline behaves exactly like a real fallback, which is what makes it

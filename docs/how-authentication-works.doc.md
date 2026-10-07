@@ -10,8 +10,10 @@
 ## The short version
 
 Open the console, **sign up** with a user id nobody else has and a password
-(or **log in**), and use it. Every page then shows only your own data. The
-five test users log in with password `demo1234`.
+(or **log in**), and use it. Every page then shows only your own data.
+Locally, the five test users can log in too, with the password set as
+`DEMO_PASSWORD` in the backend's private `.env`; on a server they have no
+login.
 
 ---
 

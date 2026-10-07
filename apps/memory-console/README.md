@@ -14,5 +14,4 @@ The backend must be running on the address in `.env.local.example`, and that
 file also needs the backend's `MEMORY_JWT_SECRET`, used to check the pass a
 person gets when they log in.
 
-Log in or sign up at http://localhost:3000/login; the test users use password
-`demo1234`.
+Log in or sign up at http://localhost:3000/login.
