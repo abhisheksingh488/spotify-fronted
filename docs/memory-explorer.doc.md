@@ -17,8 +17,8 @@ All five are on the screen.
    screen lists everything rather than only what matches a phrase.
 
 2. **`post("/v1/memories/search", …)`** — `lib/api.ts`
-   → `/api/backend/v1/memories/search` on the console's own server, which mints
-   the token for the selected subject and forwards it.
+   → `/api/backend/v1/memories/search` on the console's own server, which checks
+   the login pass, writes the logged-in user's id in, and forwards it.
    → **Backend `POST /v1/memories/search`** → **`retrieval.search()`**:
    - **Neo4j** — `graph_candidates()` walks `:ABOUT` edges for relational matches
    - **Neo4j vector index** — `similar()` for semantic matches on `embedding_384`
@@ -33,15 +33,15 @@ view control, not another query.
 
 ---
 
-## "Search only with approved support or test identities"
+## Only your own memories
 
 This is why there is no free-text subject box on this screen.
 
-The subject comes from the picker in the header, whose list is `lib/subjects.ts`
-— the five identities the backend's migration seeds. The console's gateway checks
-the cookie against that same list **before it signs a token**, so editing the
-cookie by hand cannot widen what the console can reach. Verified: a cookie naming
-`somebody_elses_account` comes back acting as `user_001`.
+`abc.md:340` limits the explorer to approved identities. Here the only identity
+is the one you logged in as: the gateway takes the user id from the login pass
+and writes it into every request, so you see your own memories and nobody
+else's. Verified: logged in as `user_001`, a request naming `user_002` is
+served as `user_001`. See `how-authentication-works.doc.md`.
 
 ---
 

@@ -28,8 +28,8 @@ This screen starts when the operator presses **Compose context**.
    Clears the previous result, then makes the two calls below in order.
 
 2. **`post("/v1/memories/search", …)`** — `lib/api.ts`
-   POSTs the JSON to `/api/backend/...` on the console's own server, which mints
-   the token and forwards it, and turns a failure into an `ApiFailure` carrying
+   POSTs the JSON to `/api/backend/...` on the console's own server, which checks
+   the login pass, writes the logged-in user's id in, forwards it, and turns a failure into an `ApiFailure` carrying
    the backend's stable code.
    → **Backend endpoint 4, `POST /v1/memories/search`**, which reads
    **Neo4j** (the memory graph and its 384-dimension vectors) and
@@ -91,7 +91,9 @@ screen from a result into an explanation.
 | Function | Why it exists |
 |---|---|
 | `post()` | Sends JSON to the gateway route and normalises errors. No token, no headers to remember. |
-| `useSubject()` (`lib/useSubject.ts`) | Which subject the console is acting as, read from the one cookie the picker writes. |
+| `useSubject()` (`lib/useSubject.ts`) | The logged-in user's id, shown in the request card. |
+| `tell()` | `app/context/page.tsx` | "Tell Spotify's AI": sends one sentence as `POST /v1/events`; the worker turns it into the logged-in user's memories. |
+| `findSongs()` | same | The songs demo: searches with the request plus the top preference, skipping excluded genres (`app/api/songs/route.ts`). |
 | `ApiFailure` | An error that carries the backend's stable code and correlation id, not just a message. |
 | `toFailure()` | Unwraps the backend's `{"detail": {code, message, correlation_id}}` envelope. |
 

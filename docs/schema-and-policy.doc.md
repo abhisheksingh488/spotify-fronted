@@ -13,8 +13,8 @@ state."*
 Two reads on load, both read-only.
 
 1. **`get<OpenApi>("/openapi.json")`** — `lib/api.ts`
-   → `/api/backend/openapi.json` on the console's own server, which mints the
-   token and forwards it.
+   → `/api/backend/openapi.json` on the console's own server, which checks the
+   login pass and forwards it.
    → **Backend `GET /openapi.json`** — FastAPI generates this from the Pydantic
    models in `memory/models.py`. It touches no store.
 

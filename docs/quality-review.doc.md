@@ -11,8 +11,8 @@ memory-enabled comparisons."*
 ## Call flow
 
 1. **`useEffect`** on load → **`get<QualityRuns>("/quality/runs")`** — `lib/api.ts`
-   → `/api/backend/quality/runs` on the console's own server, which mints the
-   token and forwards it.
+   → `/api/backend/quality/runs` on the console's own server, which checks the
+   login pass and forwards it.
    → **Backend `GET /quality/runs`** →
    - **`db.golden_runs()`** → **PostgreSQL** `golden_run`, every run newest first
    - **`db.golden_cases()`** → **PostgreSQL** `golden_case_result`, the newest
@@ -118,8 +118,8 @@ A subject in the memory-disabled arm gets an explicit no-memory package from
 `POST /v1/context/compose`, taking the same path as any other fallback rather
 than a special case — which is what makes it a fair baseline.
 
-`user_003` is allocated to that arm. Switch the subject picker to it and open
-**Context preview** to see the two side by side.
+`user_003` is allocated to that arm. Log in as `user_003` (password
+`demo1234`) and open **Context preview** to see it.
 
 ---
 

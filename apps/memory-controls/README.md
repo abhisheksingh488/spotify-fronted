@@ -1,10 +1,10 @@
 # memory-controls
 
-The listener-facing app: review, correct and remove what the AI remembers about
-you. `abc.md:253` — *"Review, correction, deletion UI"*.
+The listener page: review, correct, remove, pause or switch off what the AI
+remembers about you. `abc.md:253` - *"Review, correction, deletion UI"*.
 
 See `docs/memory-controls.doc.md` in the repository root for the call flow, and
-the repository README for how this fits beside the console.
+the repository README for how this fits beside the main app.
 
 ```bash
 npm install
@@ -13,19 +13,16 @@ npm run dev                          # http://localhost:3001
 npm run build
 ```
 
-## Two things that make this different from the console
+## How it works
 
-**The subject is fixed.** `MEMORY_SUBJECT_ID` in `.env.local` is the signed-in
-listener, standing in for the Spotify session a real deployment would read. There
-is no picker, and nothing the browser sends can change it — the gateway injects it
-into every request. Set it to `user_005` to see what a listener with paused consent
-sees.
+**Log in first.** Each listener signs up or logs in with their own user id and
+password (`app/login/page.tsx`); the test users use `demo1234`. The gateway
+takes the user id from the login pass and writes it into every request, so
+nothing the browser sends can reach anybody else's memories.
 
 **The gateway is not a general proxy.** It allows only search, one memory, one
-deletion job, feedback and health. Anything else answers `403 NOT_ALLOWED_HERE`.
+deletion job, feedback, consent and health. Anything else answers
+`403 NOT_ALLOWED_HERE`.
 
-## Pause and opt out
-
-Shown, disabled, with the reason. Both change consent state, and none of the ten
-endpoints in `abc.md:303-322` changes consent. A switch that looked like it turned
-memory off without turning it off would be worse than not offering one.
+**Pause and opt out work.** Both change consent through `PATCH /v1/consent`,
+take effect on the very next request, and delete nothing.

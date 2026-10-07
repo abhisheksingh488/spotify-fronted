@@ -19,8 +19,8 @@ Runs on load, then every ten seconds.
    asking for, so it stops there.
 
 2. **`getHealth()`** → **`get("/health")`** — `lib/api.ts`
-   → `/api/backend/health` on the console's own server, which mints the token
-   and forwards it.
+   → `/api/backend/health` on the console's own server, which checks the login
+   pass and forwards it.
    → **Backend `GET /health`** — answers `{"status": "ok"}`, touches no store.
 
 3. **`get<Metrics>("/metrics")`** — `lib/api.ts`
@@ -113,7 +113,7 @@ has not measured anything.
 **Stop the backend and watch this screen.** Within ten seconds it turns red and
 prints the two commands that start the API and the worker.
 
-**Switch the subject picker to `user_003` and open Context preview.** That
+**Log in as `user_003` (password `demo1234`) and open Context preview.** That
 subject is in the memory-disabled arm, so it gets an explicit no-memory package —
 and the fallback rate here moves, with `memory_disabled_cohort` named as the
 reason. The baseline behaves exactly like a real fallback, which is what makes it

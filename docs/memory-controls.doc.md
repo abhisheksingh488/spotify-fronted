@@ -26,25 +26,27 @@ entity identifiers and no policy vocabulary. A `candidate_preference` is shown a
 
 ---
 
-## The subject is fixed, and that is the point
+## You only ever reach your own account, and that is the point
 
-The console lets an operator switch between approved test identities. This app
-cannot switch at all.
+The listener logs in with their own user id and password (`app/login/page.tsx`,
+standing in for the Spotify session a real deployment would read). There is no
+way to switch to anybody else.
 
-`app/api/backend/[...path]/route.ts` reads `MEMORY_SUBJECT_ID` on the server —
-standing in for the signed-in Spotify session a real deployment would read — and
-**injects it into every request**: into the JSON body on `POST` and `PATCH`, and
-into the query string on `GET` and `DELETE`, overwriting anything the browser sent.
+`app/api/backend/[...path]/route.ts` checks the login pass (`lib/session.ts`),
+takes the user id from it, and **injects it into every request**: into the JSON
+body on `POST` and `PATCH`, and into the query string on `GET` and `DELETE`,
+overwriting anything the browser sent. No pass means *"Please log in"*.
 
 The page never mentions a subject anywhere. So the strongest requirement in the
 document — one listener can never reach another listener's memories — holds here
 by construction rather than by a check.
 
-Verified: a request whose body claims `subject_id: "user_002"` is served as
-`user_001` regardless, because the server overwrites the field.
+Verified: logged in as `user_001`, a request whose body claims
+`subject_id: "user_002"` is served as `user_001` regardless, because the server
+overwrites the field.
 
 The gateway is also **not a general proxy**. `ALLOWED` is a closed list of path
-patterns: search, one memory, one deletion job, feedback and health. A listener's
+patterns: search, one memory, one deletion job, feedback, consent and health. A listener's
 app has no business reading `/metrics` or calling extraction.
 
 Verified: `GET /metrics` through this app returns `403 NOT_ALLOWED_HERE`.
@@ -151,8 +153,9 @@ does not know what a backup retention window is.
 | `stillThere` | same | Any store unaccounted for. Decides which of the two messages is shown. |
 | `IN_PLAIN_WORDS` | same | Each memory type in language for the person it is about. |
 | `weGuessed()` | same | Whether we inferred it, which decides the softer framing and the extra way to say no. |
-| `proxy()` | `app/api/backend/[...path]/route.ts` | Mints the token, refuses paths this app may not call, injects the fixed subject into body and query. |
-| `mintToken()` | same | Signs `sub`, `svc`, `iat`, `exp` — `svc` is `memory-controls`, so a listener's own change is distinguishable from an operator's in the audit log. |
+| `proxy()` | `app/api/backend/[...path]/route.ts` | Checks the login pass, refuses paths this app may not call, injects the logged-in user into body and query. |
+| `readSession()` | `lib/session.ts` | Reads and checks the pass kept in the httpOnly cookie at login. |
+| `LoginPage` | `app/login/page.tsx` | Log in / sign up. |
 | `refuse()` | same | A refusal in the backend's own error envelope, so the app handles it like any other failure. |
 
 ---
@@ -165,5 +168,5 @@ cp .env.local.example .env.local     # add the backend MEMORY_JWT_SECRET
 npm install && npm run dev           # http://localhost:3001
 ```
 
-`MEMORY_SUBJECT_ID` in `.env.local` decides which listener the app is for. Set it
-to `user_005` to see what a listener with paused consent sees.
+Log in as `user_005` (password `demo1234`) to see what a listener with paused
+consent sees.
