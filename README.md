@@ -57,6 +57,16 @@ out. All five work here, in plain language, and also in the main app.
 
 ---
 
+## Screenshots
+
+From the live site. All eight are in the backend repository's README.
+
+| Context preview | Memory explorer |
+|---|---|
+| ![Context preview](https://raw.githubusercontent.com/omsemwal/spotify-personalized-ai/main/docs/screenshots/02-context-preview.png) | ![Memory explorer](https://raw.githubusercontent.com/omsemwal/spotify-personalized-ai/main/docs/screenshots/03-memory-explorer.png) |
+
+---
+
 ## Running it locally
 
 Start the backend first (in its repository: `./start-backend.cmd`, or see its
