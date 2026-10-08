@@ -17,10 +17,25 @@
 // A pilot stand-in for Spotify's login - in a real deployment the listener is
 // already logged in to Spotify and this page does not exist.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Card, ErrorNote, inputClass } from "@/components/ui";
 
 type Mode = "login" | "signup";
+
+// Wait a little.
+function pause(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Ask (and so wake) the backend; true once it answers.
+async function isAwake(): Promise<boolean> {
+  try {
+    const response = await fetch("/api/wake", { cache: "no-store" });
+    return (await response.json()).ready === true;
+  } catch {
+    return false;
+  }
+}
 
 export default function LoginPage() {
   const [mode, setMode] = useState<Mode>("login");
@@ -30,6 +45,28 @@ export default function LoginPage() {
   const [ageBand, setAgeBand] = useState("adult");
   const [problem, setProblem] = useState<{ code: string; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Is the backend awake? Free hosting sleeps when idle and takes up to a
+  // minute to wake, so the page starts waking it the moment it opens
+  // (app/api/wake/route.ts) - the app then works from its own URL alone.
+  const [serverReady, setServerReady] = useState(false);
+  const [waitingNote, setWaitingNote] = useState("");
+
+  useEffect(() => {
+    let stopped = false;
+    (async () => {
+      for (let i = 0; i < 40 && !stopped; i++) {
+        if (await isAwake()) {
+          setServerReady(true);
+          return;
+        }
+        await pause(4000);
+      }
+    })();
+    return () => {
+      stopped = true;
+    };
+  }, []);
 
   // Log in or sign up, then go to the listener's own page.
   async function submit() {
@@ -44,11 +81,21 @@ export default function LoginPage() {
       body.age_band = ageBand;
     }
 
-    const response = await fetch(`/api/auth/${mode}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }).catch(() => null);
+    // If the backend is still waking, wait for it and try again rather
+    // than show an error.
+    let response: Response | null = null;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      response = await fetch(`/api/auth/${mode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }).catch(() => null);
+      if (response && ![502, 503, 504].includes(response.status)) break;
+      setWaitingNote("Waking up the server - free hosting sleeps when idle. This takes up to a minute...");
+      while (!(await isAwake())) await pause(4000);
+      setServerReady(true);
+    }
+    setWaitingNote("");
 
     if (response?.ok) {
       window.location.href = "/";
@@ -68,6 +115,13 @@ export default function LoginPage() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
+      {/* Whether the backend is awake - see the useEffect above. */}
+      <p className={`text-xs ${serverReady ? "text-accent" : "text-muted"}`}>
+        {serverReady
+          ? "Server ready."
+          : "Waking up the server (free hosting sleeps when idle) - you can type meanwhile..."}
+      </p>
+      {waitingNote && <p className="text-sm text-muted">{waitingNote}</p>}
       <Card
         title={mode === "login" ? "Log in" : "Create your account"}
         hint={
