@@ -74,7 +74,7 @@ type Song = {
 export default function ContextPreviewPage() {
   // Whoever is logged in.
   const subjectId = useSubject();
-  const [intent, setIntent] = useState("put some music on");
+  const [intent, setIntent] = useState("");
   const [surface, setSurface] = useState<Surface>("player");
   const [budget, setBudget] = useState(500);
 
@@ -83,16 +83,16 @@ export default function ContextPreviewPage() {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // "Tell Spotify's AI" - what the logged-in listener says, sent as an event.
-  const [saying, setSaying] = useState("");
-  const [told, setTold] = useState("");
+  // What happened to the message in the background, shown under the box.
+  const [captured, setCaptured] = useState("");
 
-  // Send one sentence as an event (POST /v1/events). The gateway adds the
-  // logged-in user's id, so it can only ever become their own memory. The
-  // worker turns it into memories a few seconds later.
-  async function tell() {
-    setTold("");
-    setFailure(null);
+  // Capture the message as an interaction event (POST /v1/events), the way a
+  // real Spotify surface records every interaction (abc.md §5.4). The worker
+  // then decides what is worth remembering: "I love Arijit Singh" becomes a
+  // preference, "play something now" usually becomes nothing. The gateway
+  // adds the logged-in user's id, so it can only ever be their own memory.
+  // A failure here never stops the answer.
+  async function capture(message: string) {
     const key = `console_${Date.now()}`;
     try {
       await post("/v1/events", {
@@ -104,12 +104,13 @@ export default function ContextPreviewPage() {
         consent_state: "granted",
         source_event_id: key,
         idempotency_key: key,
-        content: saying,
+        content: message,
       });
-      setTold(`Saved. In a few seconds it becomes a memory - then ask below.`);
-      setSaying("");
-    } catch (error) {
-      setFailure(error as ApiFailure);
+      setCaptured(
+        "Also learning from this in the background - anything worth remembering appears in Memory explorer in about a minute.",
+      );
+    } catch {
+      setCaptured("Answered, but this message could not be saved for learning.");
     }
   }
 
@@ -148,6 +149,9 @@ export default function ContextPreviewPage() {
   async function run() {
     setBusy(true);
     setFailure(null);
+    setCaptured("");
+    // Learn from it in the background; answer straight away.
+    capture(intent);
     setSearch(null);
     setPack(null);
     setSongs(null);
@@ -185,29 +189,10 @@ export default function ContextPreviewPage() {
       <header>
         <h1 className="text-xl font-semibold">Context preview</h1>
         <p className="mt-1 text-sm text-muted">
-          What the assistant would be told, for this intent, on this surface -
-          and every step that decided it.
+          Talk to Spotify&apos;s AI. You see what it would be told about you, every
+          step that decided it, and songs - and it learns from what you say.
         </p>
       </header>
-
-      <Card
-        title="Tell Spotify's AI"
-        hint="Say something about what you like or don't like. It is saved as your memory, never anyone else's."
-      >
-        <div className="flex flex-wrap gap-2">
-          <input
-            className={`${inputClass} min-w-0 flex-1`}
-            placeholder="e.g. I love Arijit Singh romantic songs, but no heavy metal"
-            value={saying}
-            onChange={(event) => setSaying(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && saying.trim() && tell()}
-          />
-          <Button onClick={tell} disabled={!saying.trim()}>
-            Tell
-          </Button>
-        </div>
-        {told && <p className="mt-2 text-sm text-accent">{told}</p>}
-      </Card>
 
       <Card
         title="The request"
@@ -231,14 +216,19 @@ export default function ContextPreviewPage() {
           </Field>
 
           <div className="sm:col-span-2">
-            <Field label="Current intent" hint="What the listener is asking for now.">
+            <Field
+              label="Talk to Spotify's AI"
+              hint="Ask for music, or say what you like. You get an answer now, and it learns from what you say."
+            >
               <input
                 className={inputClass}
+                placeholder="e.g. play something romantic - I love Arijit Singh, but no heavy metal"
                 value={intent}
                 onChange={(event) => setIntent(event.target.value)}
-                onKeyDown={(event) => event.key === "Enter" && run()}
+                onKeyDown={(event) => event.key === "Enter" && intent.trim() && !busy && run()}
               />
             </Field>
+            {captured && <p className="mt-2 text-xs text-accent">{captured}</p>}
           </div>
 
           <Field label="Token budget" hint="50 to 4000. The pack is trimmed to fit.">
@@ -254,7 +244,7 @@ export default function ContextPreviewPage() {
 
           <div className="flex items-end">
             <Button onClick={run} disabled={busy || !intent.trim()}>
-              {busy ? "Composing..." : "Compose context"}
+              {busy ? "Thinking..." : "Send"}
             </Button>
           </div>
         </div>

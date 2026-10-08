@@ -41,7 +41,7 @@ Exactly the seven of `abc.md:339-345`, in the document's own order.
 |---|---|---|
 | 1 | **Overview** | Service health, ingestion lag, retrieval SLO against the 250 ms budget, fallback rate, write failures, cache hit rate, policy rejections, quality, experiment status, deletion backlog |
 | 2 | **Memory explorer** | Your memories: timeline, relationships, source, confidence, status |
-| 3 | **Context preview** | **Tell Spotify's AI** something, then ask: candidate retrieval, ranking, policy removals, the final pack, token usage - and a songs demo |
+| 3 | **Context preview** | **Talk to Spotify's AI** in one box: you get an answer from your memories (ranking, policy removals, the final pack, token usage, songs), and it learns from what you say |
 | 4 | **Correction and deletion** | Correct, expire, remove - with per-store propagation and no silent partial completion |
 | 5 | **Schema and policy** | Allowed fields, contract version, retention by type, geography and age, each memory type's definition and example - read-only |
 | 6 | **Quality review** | Golden-set runs, failure clusters, multilingual and contradiction cases, memory-enabled comparison |

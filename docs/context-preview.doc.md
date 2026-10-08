@@ -92,7 +92,7 @@ screen from a result into an explanation.
 |---|---|
 | `post()` | Sends JSON to the gateway route and normalises errors. No token, no headers to remember. |
 | `useSubject()` (`lib/useSubject.ts`) | The logged-in user's id, shown in the request card. |
-| `tell()` | `app/context/page.tsx` | "Tell Spotify's AI": sends one sentence as `POST /v1/events`; the worker turns it into the logged-in user's memories. |
+| `capture()` | `app/context/page.tsx` | Every message sent in "Talk to Spotify's AI" is also captured as `POST /v1/events`, the way a real surface records interactions; the worker decides what is worth remembering. |
 | `findSongs()` | same | The songs demo: searches with the request plus the top preference, skipping excluded genres (`app/api/songs/route.ts`). |
 | `ApiFailure` | An error that carries the backend's stable code and correlation id, not just a message. |
 | `toFailure()` | Unwraps the backend's `{"detail": {code, message, correlation_id}}` envelope. |
