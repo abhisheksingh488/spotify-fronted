@@ -86,9 +86,9 @@ export default function SubjectBar() {
             value={consent}
             onChange={(event) => changeConsent(event.target.value as Consent)}
           >
-            <option value="granted">turn memory on</option>
-            <option value="paused">pause memory (keep, don&apos;t use)</option>
-            <option value="denied">turn memory off</option>
+            <option value="granted">Memory: on</option>
+            <option value="paused">Memory: paused (kept, not used)</option>
+            <option value="denied">Memory: off</option>
           </select>
         </>
       )}
