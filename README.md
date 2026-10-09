@@ -4,7 +4,7 @@ The web app for the governed memory system: log in, tell Spotify's AI what
 you like, and see exactly what it remembers, how it ranks it, and what reaches
 the model - for your own account only.
 
-**Backend:** https://github.com/omsemwal/spotify-personalized-ai
+**Backend:** https://github.com/abhisheksingh488/spotify-personalized-ai
 **Live app:** https://spotifyfrontend11.netlify.app
 
 Stack is `abc.md:200`: *Next.js, React, Tailwind CSS*.
