@@ -147,3 +147,8 @@ Both apps share the same shape.
 | `lib/session.ts` | Reads and checks the login pass |
 | `lib/api.ts` | The only place pages call the backend from |
 | `lib/types.ts` | Response shapes, mirroring the backend's Pydantic models |
+
+## Project Repositories
+
+- **Backend:** https://github.com/abhisheksingh488/spotify-personalized-ai
+- **Frontend:** https://github.com/abhisheksingh488/spotify-fronted
