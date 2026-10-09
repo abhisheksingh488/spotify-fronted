@@ -154,3 +154,4 @@ Both apps share the same shape.
 
 - **Backend:** https://github.com/abhisheksingh488/spotify-personalized-ai
 - **Frontend:** https://github.com/abhisheksingh488/spotify-fronted
+- **Video Demonstration:** https://drive.google.com/file/d/1-tkfYiCqizLGlRSzogG6CirlmLSS92Dv/view?usp=sharing
