@@ -7,6 +7,8 @@ the model - for your own account only.
 **Backend:** https://github.com/abhisheksingh488/spotify-personalized-ai
 **Live app:** https://spotifyfrontend11.netlify.app
 
+**Video Demonstration:** https://drive.google.com/file/d/1-tkfYiCqizLGlRSzogG6CirlmLSS92Dv/view?usp=sharing
+
 Stack is `abc.md:200`: *Next.js, React, Tailwind CSS*.
 
 ---
